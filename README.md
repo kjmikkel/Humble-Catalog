@@ -31,7 +31,10 @@ a count when its section is waiting on something — a queue you can empty,
 never an optional backlog. In Library the filters live in a sidebar that
 folds away; whatever is currently narrowing the table stays listed beside
 the toolbar, so a folded sidebar can never hide the reason a search looks
-empty.
+empty. The filters survive a reload, but never silently: a banner says
+they were restored and offers to start fresh. They are kept in the
+browser, never in the address bar, where author and tag names would end
+up in history; the phone viewer does not keep them at all.
 
 ## One-time setup
 

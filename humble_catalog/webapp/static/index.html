@@ -78,6 +78,14 @@
   </div>
   </aside>
   <div id="library-main">
+  <!-- Raised when the filters from the last visit were brought back (#44).
+       Not a live region: it only ever appears at page load, first in
+       reading order, so it is read before the table it explains. -->
+  <div id="restored-banner" hidden>
+    Restored the filters from your last visit.
+    <button type="button" id="restore-reset">Start fresh</button>
+    <button type="button" id="restore-keep">Keep them</button>
+  </div>
   <div id="table-toolbar">
     <button id="sidebar-toggle" type="button"
             aria-controls="filters" aria-expanded="true">Filters</button>

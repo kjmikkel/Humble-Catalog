@@ -173,6 +173,12 @@ section[id^="section-"][hidden] { display: none; }
                   padding: 2rem 1rem; font-style: italic; }
 .list-empty { color: var(--muted); text-align: center; padding: 2rem 1rem;
               font-style: italic; margin: 0; }
+/* The filters-restored banner (#44). Accent-edged rather than a warning:
+   nothing is wrong, the table is just narrower than a fresh page. */
+#restored-banner { display: flex; flex-wrap: wrap; align-items: center;
+                   gap: .5rem; margin: 0 0 .5rem; padding: .4rem .75rem;
+                   border-left: 3px solid var(--accent); }
+#restored-banner[hidden] { display: none; }
 /* The line under a list capped at ROW_CAP (#52): what was left out, and
    the button that draws it. Muted like the empty line, but upright -- it
    holds a control, not a verdict. */
