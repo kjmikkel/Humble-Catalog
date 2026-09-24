@@ -84,6 +84,7 @@ h1 { margin: 0 0 .5rem; font-size: 1.2rem; }
 /* Search sits in the header, above the tabs: it is how most sessions
    start, and it is the one control that should never be a fold away. */
 #search-row { display: flex; gap: .5rem; align-items: center; }
+#search-row[hidden] { display: none; }
 #search-label { font-weight: 600; color: var(--fg); }
 #search-wrap { flex: 1 1 16rem; }
 #search { width: 100%; padding: .4rem; }

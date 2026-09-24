@@ -50,6 +50,7 @@ const currentSection = () => {
 // silent rewrite would erase the evidence that a bookmark went stale.
 function showSection(name) {
   const active = SECTIONS.some((s) => s.id === name && sectionAllowed(s.id)) ? name : "library";
+  $("#search-row").hidden = active !== "library";
   for (const s of SECTIONS) {
     const el = $(`#section-${s.id}`);
     if (el) el.hidden = s.id !== active;

@@ -37,8 +37,14 @@ const displayState = (r) => (r.hidden_at ? "hidden" : r.state);
 const keysExpiring = () =>
   keyRows.filter((r) => r.expires && !r.expired && !r.hidden_at).length;
 
-const shownKeys = () =>
-  keyRows.filter((r) => keyStates.has(displayState(r)));
+const searchedKeys = () => {
+  const query = $("#keys-search").value.trim().toLocaleLowerCase();
+  return keyRows.filter((r) =>
+    [r.product, r.store, r.key_type_label].some(
+      (value) => (value || "").toLocaleLowerCase().includes(query)));
+};
+
+const shownKeys = () => searchedKeys().filter((r) => keyStates.has(displayState(r)));
 
 // Counted here, not read from keyCounts: keyCounts partitions every key,
 // matched and hidden included, so a chip reading "Not in a library 624"
@@ -49,7 +55,7 @@ const shownKeys = () =>
 function keyChipCounts() {
   const counts = {};
   for (const s of KEY_STATES) counts[s.state] = 0;
-  for (const r of keyRows) counts[displayState(r)] += 1;
+  for (const r of searchedKeys()) counts[displayState(r)] += 1;
   return counts;
 }
 
@@ -174,3 +180,5 @@ $("#keys-panel").addEventListener("click", (ev) => {
   if (keyStates.has(state)) keyStates.delete(state); else keyStates.add(state);
   renderKeys();
 });
+
+$("#keys-search").addEventListener("input", renderKeys);

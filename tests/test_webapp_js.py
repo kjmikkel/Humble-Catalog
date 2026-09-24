@@ -3342,3 +3342,39 @@ def test_bundle_guidance_disappears_after_either_preview():
           return {before, after: !!hint.hidden};
         })()""" % (json.dumps(report), method))
         assert result == {"before": False, "after": True}
+
+
+def test_keys_text_filter_matches_title_and_store_without_changing_library_search():
+    result = _with_keys('''(() => {
+      app.setSearch("a separate library query");
+      const search = document.querySelector("#keys-search");
+      search.value = "  AMBER  ";
+      const title = app.shownKeys().map(r => r.product);
+      search.value = "steam";
+      const store = app.shownKeys().map(r => r.store);
+      app.setKeyStates([]);
+      const none = app.shownKeys().length;
+      app.setKeyStates(["unredeemed", "uncertain"]);
+      search.value = "does-not-exist";
+      const missing = app.shownKeys().length;
+      search.value = "";
+      return {title, store, none, missing, reset: app.shownKeys().length,
+              library: document.querySelector("#search").value};
+    })()''')
+    assert result["title"] == ["Amber Hollow"]
+    assert result["store"] and set(result["store"]) == {"steam"}
+    assert result["none"] == result["missing"] == 0
+    assert result["reset"] == 2
+    assert result["library"] == "a separate library query"
+
+
+def test_library_search_is_hidden_outside_library_and_restored_on_return():
+    result = eval_js('''(() => {
+      app.setSearch("retained query");
+      const hidden = ["keys", "bundles", "maintenance", "tasks", "library"].map(id => {
+        app.showSection(id);
+        return document.querySelector("#search-row").hidden;
+      });
+      return {hidden, query: document.querySelector("#search").value};
+    })()''')
+    assert result == {"hidden": [True, True, True, True, False], "query": "retained query"}
