@@ -798,8 +798,8 @@ const isNarrow = () =>
 // Display-only on every viewer: editing needs the table's width. Every
 // field is guarded the way tagBadges and person are, so a partial payload
 // renders a thinner card instead of throwing.
-function renderCards(rows) {
-  return rows.map((i) => {
+function renderCards(rows, mark = () => "") {
+  return rows.map((i, idx) => {
     const status = READ_STATUS_LABEL[i.read_status || "unread"] || "";
     const series = i.series
       ? ` · ${esc(i.series)}${i.series_number ? " #" + i.series_number : ""}` : "";
@@ -812,7 +812,10 @@ function renderCards(rows) {
     const opens = READ_ONLY ? "" :
       ` role="button" tabindex="0" data-open="${i.id}"` +
       ` aria-label="Edit ${esc(i.name)}"`;
-    return `<article class="card${READ_ONLY ? "" : " tappable"}"${opens}>
+    // A tappable card is already a Tab stop, so it only needs the marker;
+    // a read-only one takes tabindex="-1" with it, like a table row.
+    const marked = mark(idx) && !READ_ONLY ? " data-revealed" : mark(idx);
+    return `<article class="card${READ_ONLY ? "" : " tappable"}"${opens}${marked}>
     ${READ_ONLY ? "" : '<span class="card-chevron" aria-hidden="true">&rsaquo;</span>'}
     ${i.cover_path
       ? `<img class="card-cover" src="/${i.cover_path}" alt="" loading="lazy">`
@@ -938,9 +941,68 @@ function refreshSheet(id) {
   // render() redraws the panel, so there is nothing to refresh after it.
 }
 
+// How many rows render() draws. Every drawn row costs ~70us of innerHTML,
+// and a table of thousands also makes any layout read cost tens of ms --
+// the search box's autocomplete positions itself on every keystroke. So
+// the list stops at ROW_CAP with a line saying what was left out (#52).
+// Not virtualization: that would fight the sticky <thead> and the
+// delegated click handler, and a cap needs neither to change.
+//
+// The cap applies to drawing only. #count, the bulk bar, the export and
+// the stats panel all act on every matching row, via visible().
+const ROW_CAP = 200;
+let rowLimit = ROW_CAP;
+// The view the current rowLimit was granted for. "Show all" expands one
+// view; a different one starts capped again, so an expanded list cannot
+// make every later keystroke pay for the whole catalog.
+let rowLimitView = null;
+// Set by showAllRows() for exactly one render: which row to mark as the
+// first one the button revealed, so focus has somewhere to land.
+let revealFrom = null;
+
+// Identifies what the list is OF, as opposed to how it currently looks.
+// render() collapses the list back to ROW_CAP whenever this changes.
+//
+// Filters only. Sort is left out on purpose: a header click reorders the
+// same set, and snapping a list the user just asked to see whole back to
+// ROW_CAP would answer a request they did not make. Item content is left
+// out too, or rating a star would collapse the list under the pointer.
+function viewKey() {
+  return JSON.stringify([
+    $("#search").value.trim(),
+    $("#f-type").value, $("#f-flag").value, $("#f-rating").value,
+    [...statusFilter].sort(),
+    Object.values(chipFilters).map(f => [f.chips, f.mode, f.text]),
+  ]);
+}
+
+function showAllRows() {
+  revealFrom = Math.min(rowLimit, visible().length);
+  rowLimit = Infinity;
+  render();
+  revealFrom = null;
+  const target = isNarrow() ? "#card-list [data-revealed]"
+                            : "#catalog tbody [data-revealed]";
+  document.querySelector(target)?.focus({preventScroll: true});
+}
+
+// The line under a capped list. Empty when nothing was left out.
+function moreLine(shown, total) {
+  if (shown >= total) return "";
+  return `Showing the first ${shown} of ${total}. `
+    + `<button type="button" class="show-all">Show all ${total}</button>`;
+}
+
 function render() {
   renderActiveFilters();
   const rows = visible();
+  const view = viewKey();
+  if (view !== rowLimitView) { rowLimit = ROW_CAP; rowLimitView = view; }
+  const drawn = rows.slice(0, rowLimit);
+  const more = moreLine(drawn.length, rows.length);
+  // The first row "Show all" revealed: focusable only so the keyboard can
+  // be put there, never a Tab stop of its own.
+  const revealed = (idx) => idx === revealFrom ? ' data-revealed tabindex="-1"' : "";
   $("#count").textContent = `${rows.length} / ${items.length} items`
     + (relevanceActive() ? " · by relevance" : "");
   const narrow = isNarrow();
@@ -965,10 +1027,11 @@ function render() {
       ? `<p class="list-empty">${text}</p>` : "";
   } else if (narrow) {
     $("#catalog tbody").innerHTML = "";
-    $("#card-list").innerHTML = renderCards(rows);
+    $("#card-list").innerHTML = renderCards(drawn, revealed)
+      + (more ? `<p class="list-more">${more}</p>` : "");
   } else {
     $("#card-list").innerHTML = "";
-    $("#catalog tbody").innerHTML = rows.map(i => i.id === editingId ? `<tr>
+    $("#catalog tbody").innerHTML = drawn.map((i, idx) => i.id === editingId ? `<tr${revealed(idx)}>
     <td>${i.cover_path ? `<img src="/${i.cover_path}" alt="" loading="lazy">` : ""}</td>
     <td><strong>${esc(i.name)}</strong><br>
       <input class="edit-field edit-url" data-f="source_url" type="url"
@@ -992,7 +1055,7 @@ function render() {
     ${chipCell("user_tags")}
     <td><textarea class="edit-comment" rows="2"
                   placeholder="Notes...">${esc(i.user_comment)}</textarea></td>
-  </tr>` : `<tr>
+  </tr>` : `<tr${revealed(idx)}>
     <td>${i.cover_path ? `<img src="/${i.cover_path}" alt="" loading="lazy">` : ""}</td>
     <td><strong>${highlight(i.name, matchSpans.get(i.id))}</strong>${nameExtras(i)}</td>
     <td>${i.type}</td>
@@ -1009,7 +1072,8 @@ function render() {
     <td class="stars">${stars(i)}</td>
     <td>${tagBadges(i.user_tags)}</td>
     <td class="user-comment">${esc(i.user_comment)}</td>
-  </tr>`).join("");
+  </tr>`).join("")
+      + (more ? `<tr class="table-more"><td colspan="99">${more}</td></tr>` : "");
   }
   wireTagInputs();
   renderBulkBar();
@@ -1183,6 +1247,8 @@ document.addEventListener("click", async (ev) => {
                    user_tags: [...it.user_tags]};
     editingTags[personField(it)] = [...person(it)];
     render();
+  } else if (el.classList.contains("show-all")) {
+    showAllRows();
   } else if (el.classList.contains("edit-cancel")) {
     editingId = null;
     editingTags = null;
