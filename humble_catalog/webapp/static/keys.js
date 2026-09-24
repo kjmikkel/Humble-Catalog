@@ -44,6 +44,8 @@ const searchedKeys = () => {
       (value) => (value || "").toLocaleLowerCase().includes(query)));
 };
 
+const statedKeys = () => keyRows.filter((r) => keyStates.has(displayState(r)));
+
 const shownKeys = () => searchedKeys().filter((r) => keyStates.has(displayState(r)));
 
 // Counted here, not read from keyCounts: keyCounts partitions every key,
@@ -91,11 +93,21 @@ function renderKeys() {
   const libraries = Object.entries(keyLibraries).map(
     ([store, info]) => `${esc(store)} ${info.count} (imported ${
       esc((info.imported_at || "").slice(0, 10))})`).join(", ");
+  // Two controls narrow this list, and an empty result names only the one
+  // that would bring rows back: sending someone to the chips while their
+  // search is what emptied the table wastes the only move they have. Each
+  // filter is applied alone to find out which of them is answerable.
+  const query = $("#keys-search").value.trim();
   let emptyMessage = "No keys match these filters. Try another state above.";
   if (!keyTotal) {
     emptyMessage = "No Humble keys have been fetched yet.";
   } else if (!keyRows.length) {
     emptyMessage = "All reported keys match an imported game library.";
+  } else if (query && !searchedKeys().length) {
+    emptyMessage = "No keys match that search. Clear the box to see all keys.";
+  } else if (query && statedKeys().length) {
+    emptyMessage = "No keys match that search in the states shown. "
+      + "Try another state, or clear the search.";
   }
   const importHint = libraries ? "" : READ_ONLY
     ? " Ask the catalog owner to import game libraries to compare ownership."
