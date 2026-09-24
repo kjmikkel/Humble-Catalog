@@ -1410,10 +1410,51 @@ document.addEventListener("keydown", (ev) => {
   openSheet(+card.dataset.open);
 });
 
+// One render per frame, not one per keystroke. render() rebuilds the whole
+// <tbody> through innerHTML -- measured at ~70us a row against an invented
+// catalog, so a few thousand rows put a single keystroke at 100-200ms and a
+// burst of six queues six full rebuilds. Coalescing costs the burst one.
+// (The filtering itself is not the price: fuzzy scoring the whole catalog
+// measured under 2ms. See #52.)
+//
+// The timer is not belt-and-braces. requestAnimationFrame does not fire in
+// a hidden or throttled tab -- the same trap openSheet documents above --
+// and a frame-only debounce would leave the table showing the result of a
+// query the box no longer holds. Whichever arrives first renders and
+// cancels the other.
+let renderPending = null;
+let renderToken = 0;
+function scheduleRender() {
+  if (renderPending) return;
+  // The loser of the race checks its own token rather than trusting that
+  // it was cancelled: cancelAnimationFrame may not exist, and a timer
+  // already queued can still run after its clearTimeout. Without this a
+  // stale callback renders a second time, once per keystroke.
+  const token = ++renderToken;
+  const fire = () => {
+    if (!renderPending || renderPending.token !== token) return;
+    const {frame, timer} = renderPending;
+    renderPending = null;
+    globalThis.cancelAnimationFrame?.(frame);
+    clearTimeout(timer);
+    render();
+  };
+  // A frame is ~16ms; 32 gives the frame two chances to win before the
+  // timer steps in, so a visible tab renders on a frame and not on a timer.
+  renderPending = {
+    token,
+    frame: globalThis.requestAnimationFrame?.(fire),
+    timer: setTimeout(fire, 32),
+  };
+}
+
 for (const id of ["#f-type", "#f-flag", "#f-rating"])
-  $(id).addEventListener("input", render);
+  $(id).addEventListener("input", scheduleRender);
 // Typing a query re-asserts relevance ordering; a header click clears it.
-$("#search").addEventListener("input", () => { relevanceSort = true; render(); });
+$("#search").addEventListener("input", () => {
+  relevanceSort = true;
+  scheduleRender();
+});
 
 // The bulk bar lives outside the table, so the table's innerHTML rebuilds
 // leave it alone; only its own input and re-renders refresh it.
