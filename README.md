@@ -363,9 +363,10 @@ and `↩` gives your typed values back.
   `--columns title,authors,my_rating` for a subset; the columns always
   come out in their usual order whatever order you ask in, and an
   unrecognized name is an error rather than a quietly missing column.
-- In the viewer, the Download button exports the rows currently on
-  screen, in the order shown - filter or search first and the button says
-  how many rows will leave. The dropdown beside it picks CSV or XLSX, and
+- In the viewer, the Download button exports every row the current
+  filters and search match, in the order shown - including any past the
+  first 200 the list draws before "Show all". Filter or search first and
+  the button says how many rows will leave. The dropdown beside it picks CSV or XLSX, and
   the "Columns" panel picks which columns go in; that selection is
   remembered between visits, and the summary always shows how many of the
   20 are ticked. Narrowing either rows or columns names the file
