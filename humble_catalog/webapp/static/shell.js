@@ -135,6 +135,9 @@ async function boot() {
   }
   applyMode(status.read_only);
   showSection(currentSection());
+  // After applyMode, which decides whether this viewer stores filters at
+  // all; before load(), whose first render must already be filtered.
+  restoreFilters();
   await load();
 }
 // One interval for both. pollStatus draws the header banner (which must

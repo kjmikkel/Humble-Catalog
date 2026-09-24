@@ -941,6 +941,116 @@ function refreshSheet(id) {
   // render() redraws the panel, so there is nothing to refresh after it.
 }
 
+// ---- Restoring filters on reload (#44) ---------------------------------
+// Theme, sidebar and export columns persist; until this, filters did not,
+// so a reload after ten minutes of narrowing started over.
+//
+// Restored behind a banner, never silently: a table that comes up missing
+// rows for a reason two scrolls away reads as data loss, and this viewer
+// already refuses to hide why a search looks empty.
+//
+// localStorage, not the URL. Filters in the hash would write author, bundle
+// and tag names into browser history -- a description of the library, the
+// same reason the export is a POST (see downloadExport). localStorage and
+// not sessionStorage to match the other three keys; the banner is what
+// makes a restore days later safe.
+//
+// Not on the LAN viewer. The phone does not hold catalog.db, so storage
+// there is not local to the machine that already has the library: it
+// would leave author and tag names on a device that paired once.
+const FILTER_KEY = "hc-filters";
+// The viewKey() the restore produced, while the banner stands for it.
+let restoredView = null;
+// What was last written, so a render that changed nothing writes nothing.
+let savedView = null;
+
+function saveFilters(view) {
+  if (READ_ONLY || typeof localStorage === "undefined" || view === savedView)
+    return;
+  savedView = view;
+  // Nothing stored for the default view, or clearing every filter would
+  // still raise the banner next visit, offering to reset what is reset.
+  if (isUnfiltered(JSON.parse(view))) localStorage.removeItem(FILTER_KEY);
+  else localStorage.setItem(FILTER_KEY, view);
+}
+
+// Stored state outlives renames by months, like hc-export-columns, so this
+// is the boundary where it meets the current controls. Each field is kept
+// only if it still means something -- a known status, a chip field that
+// exists, a mode it can take -- and dropped otherwise. If nothing usable is
+// left the result is the unfiltered default, never a half-applied filter,
+// and no banner. Returns whether anything was restored.
+function restoreFilters() {
+  if (READ_ONLY || typeof localStorage === "undefined") return false;
+  let raw;
+  try {
+    raw = JSON.parse(localStorage.getItem(FILTER_KEY));
+  } catch {
+    return false;   // corrupt: the next render overwrites it
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const str = (v) => typeof v === "string" ? v : "";
+  // A <select> silently shows its first option for a value it lacks; the
+  // stub in the test harness has no options at all.
+  const option = (id, v) => {
+    const el = $(`#${id}`);
+    return !el.options || [...el.options].some(o => o.value === v) ? v : "";
+  };
+  const chips = raw.chips && typeof raw.chips === "object" ? raw.chips : {};
+  const st = {
+    q: str(raw.q).trim(),
+    type: option("f-type", str(raw.type)),
+    flag: option("f-flag", str(raw.flag)),
+    rating: option("f-rating", str(raw.rating)),
+    status: (Array.isArray(raw.status) ? raw.status : [])
+      .filter(v => Object.hasOwn(READ_STATUS_ORDER, v)),
+    chips: Object.fromEntries(Object.entries(chipFilters).map(([k, f]) => {
+      const c = chips[k] && typeof chips[k] === "object" ? chips[k] : {};
+      return [k, {
+        chips: (Array.isArray(c.chips) ? c.chips : [])
+          .filter(v => typeof v === "string"),
+        mode: ["all", "any"].includes(c.mode) && !f.scalar ? c.mode : f.mode,
+        text: str(c.text),
+      }];
+    })),
+  };
+  if (isUnfiltered(st)) return false;
+
+  $("#search").value = st.q;
+  // What typing the query would have done: see the search handler.
+  relevanceSort = Boolean(st.q);
+  $("#f-type").value = st.type;
+  $("#f-flag").value = st.flag;
+  $("#f-rating").value = st.rating;
+  statusFilter.clear();
+  for (const v of st.status) statusFilter.add(v);
+  for (const chip of document.querySelectorAll(".status-chip"))
+    chip.classList.toggle("on", statusFilter.has(chip.dataset.status));
+  for (const [k, f] of Object.entries(chipFilters)) {
+    Object.assign(f, st.chips[k]);
+    const input = document.querySelector(`.chip-filter[data-field="${k}"] input`);
+    if (input) input.value = f.text;
+  }
+  renderFilterChips();
+  restoredView = savedView = viewKey();
+  return true;
+}
+
+// The banner's two answers. Both remove the control that was clicked, so
+// both put the keyboard in the search box, where clearAllFilters already
+// leaves it.
+function startFresh() {
+  restoredView = null;
+  clearAllFilters();
+  render();
+}
+
+function keepRestored() {
+  restoredView = null;
+  $("#restored-banner").hidden = true;
+  $("#search")?.focus();
+}
+
 // How many rows render() draws. Every drawn row costs ~70us of innerHTML,
 // and a table of thousands also makes any layout read cost tens of ms --
 // the search box's autocomplete positions itself on every keystroke. So
@@ -967,14 +1077,23 @@ let revealFrom = null;
 // same set, and snapping a list the user just asked to see whole back to
 // ROW_CAP would answer a request they did not make. Item content is left
 // out too, or rating a star would collapse the list under the pointer.
-function viewKey() {
-  return JSON.stringify([
-    $("#search").value.trim(),
-    $("#f-type").value, $("#f-flag").value, $("#f-rating").value,
-    [...statusFilter].sort(),
-    Object.values(chipFilters).map(f => [f.chips, f.mode, f.text]),
-  ]);
+//
+// Also the exact string stored under FILTER_KEY (#44), so "is this still
+// the view that was restored" is one comparison.
+function filterState() {
+  return {
+    q: $("#search").value.trim(),
+    type: $("#f-type").value, flag: $("#f-flag").value,
+    rating: $("#f-rating").value,
+    status: [...statusFilter].sort(),
+    chips: Object.fromEntries(Object.entries(chipFilters).map(([k, f]) =>
+      [k, {chips: [...f.chips], mode: f.mode, text: f.text}])),
+  };
 }
+const viewKey = () => JSON.stringify(filterState());
+const isUnfiltered = (st) =>
+  !st.q && !st.type && !st.flag && !st.rating && !st.status.length
+  && Object.values(st.chips).every(c => !c.chips.length && !c.text);
 
 function showAllRows() {
   revealFrom = Math.min(rowLimit, visible().length);
@@ -998,6 +1117,12 @@ function render() {
   const rows = visible();
   const view = viewKey();
   if (view !== rowLimitView) { rowLimit = ROW_CAP; rowLimitView = view; }
+  saveFilters(view);
+  // The banner describes the view that was brought back; once the user
+  // has moved on from it, it would be describing something not on screen.
+  if (restoredView !== null && view !== restoredView) restoredView = null;
+  const banner = $("#restored-banner");
+  if (banner) banner.hidden = restoredView === null;
   const drawn = rows.slice(0, rowLimit);
   const more = moreLine(drawn.length, rows.length);
   // The first row "Show all" revealed: focusable only so the keyboard can
@@ -1291,6 +1416,10 @@ document.addEventListener("click", async (ev) => {
     // The bundle links inside a card stay links: tapping one should open
     // the bundle page, not the editor.
     openSheet(+el.closest("[data-open]").dataset.open);
+  } else if (el.id === "restore-reset") {
+    startFresh();
+  } else if (el.id === "restore-keep") {
+    keepRestored();
   } else if (el.classList.contains("clear-all")) {
     clearAllFilters();
     render();

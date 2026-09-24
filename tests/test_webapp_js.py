@@ -3619,3 +3619,158 @@ def test_resorting_an_expanded_list_keeps_it_expanded():
       return dom.writes["#catalog tbody"];
     })()""")
     assert _rows(table) == 250
+
+
+# ---- Restoring filters on reload (#44) --------------------------------------
+# Restored behind a banner, never silently: a table that comes up missing
+# rows for a reason two scrolls away reads as data loss. Stored locally,
+# never in the URL, which would write author and tag names into history.
+
+def _filters(body):
+    """Run `body` against a fresh store and a small catalog."""
+    return eval_js("""(() => {
+      const store = globalThis.localStorage;
+      store.removeItem("hc-filters");
+      app.setItems(%s);
+      return (%s);
+    })()""" % (json.dumps([_item(id=1, name="Axebearer", type="ebook"),
+                           _item(id=2, name="Brightwater", type="comic")]),
+               body))
+
+
+def test_a_render_with_filters_set_stores_them():
+    stored = _filters("""(() => {
+      app.setSearch("axe");
+      document.querySelector("#f-type").value = "ebook";
+      app.chipFilters.genre.chips = ["Fantasy"];
+      app.render();
+      return JSON.parse(localStorage.getItem("hc-filters"));
+    })()""")
+    assert stored["q"] == "axe"
+    assert stored["type"] == "ebook"
+    assert stored["chips"]["genre"]["chips"] == ["Fantasy"]
+
+
+def test_an_unfiltered_render_leaves_nothing_stored():
+    # Otherwise clearing every filter would still bring up the banner on
+    # the next visit, offering to reset a view that is already the default.
+    stored = _filters("""(() => {
+      localStorage.setItem("hc-filters", '{"q":"old"}');
+      app.clearAllFilters();
+      app.render();
+      return localStorage.getItem("hc-filters");
+    })()""")
+    assert stored is None
+
+
+def test_restoring_applies_the_stored_filters_and_raises_the_banner():
+    result = _filters("""(() => {
+      localStorage.setItem("hc-filters", JSON.stringify({
+        q: "axe", type: "ebook", flag: "", rating: "", status: ["reading"],
+        chips: {genre: {chips: ["Fantasy"], mode: "any", text: ""}}}));
+      const restored = app.restoreFilters();
+      app.render();
+      return {restored, q: document.querySelector("#search").value,
+              type: document.querySelector("#f-type").value,
+              genre: app.chipFilters.genre.chips, mode: app.chipFilters.genre.mode,
+              banner: document.querySelector("#restored-banner").hidden,
+              count: dom.writes["#count:text"]};
+    })()""")
+    assert result["restored"] is True
+    assert result["q"] == "axe"
+    assert result["type"] == "ebook"
+    assert result["genre"] == ["Fantasy"]
+    assert result["mode"] == "any"
+    assert result["banner"] is False
+
+
+def test_nothing_stored_means_no_banner():
+    result = _filters("""(() => {
+      const restored = app.restoreFilters();
+      app.render();
+      return {restored, banner: document.querySelector("#restored-banner").hidden};
+    })()""")
+    assert result["restored"] is False
+    assert result["banner"] is True
+
+
+def test_unusable_stored_state_restores_nothing():
+    # Stored state outlives renames by months, like hc-export-columns: every
+    # way of being unusable collapses to the unfiltered default, never to
+    # a half-applied filter.
+    for raw in ['{not json', '[]', '"axe"', '{"chips": 5}',
+                '{"q": 42, "status": "reading"}']:
+        result = _filters("""(() => {
+          localStorage.setItem("hc-filters", %s);
+          return {restored: app.restoreFilters(),
+                  q: document.querySelector("#search").value};
+        })()""" % json.dumps(raw))
+        assert result == {"restored": False, "q": ""}, raw
+
+
+def test_restoring_drops_what_no_longer_exists_and_keeps_the_rest():
+    result = _filters("""(() => {
+      localStorage.setItem("hc-filters", JSON.stringify({
+        q: "axe", status: ["reading", "shelved"],
+        chips: {genre: {chips: ["Fantasy", 7], mode: "sideways", text: 3},
+                gone_field: {chips: ["x"]}}}));
+      app.restoreFilters();
+      return {status: [...app.getStatusFilter()],
+              genre: app.chipFilters.genre.chips, mode: app.chipFilters.genre.mode,
+              text: app.chipFilters.genre.text};
+    })()""")
+    assert result["status"] == ["reading"]
+    assert result["genre"] == ["Fantasy"]
+    assert result["mode"] == "all"       # the field's own default
+    assert result["text"] == ""
+
+
+def test_changing_a_filter_after_restoring_lowers_the_banner():
+    # The banner describes what was brought back. Once the user has moved
+    # on from that view, it is describing something no longer on screen.
+    banner = _filters("""(() => {
+      localStorage.setItem("hc-filters", '{"q": "axe"}');
+      app.restoreFilters();
+      app.render();
+      app.setSearch("bright");
+      app.render();
+      return document.querySelector("#restored-banner").hidden;
+    })()""")
+    assert banner is True
+
+
+def test_start_fresh_clears_everything_the_banner_restored():
+    result = _filters("""(() => {
+      localStorage.setItem("hc-filters", JSON.stringify({q: "axe", type: "ebook"}));
+      app.restoreFilters();
+      app.render();
+      app.startFresh();
+      return {q: document.querySelector("#search").value,
+              type: document.querySelector("#f-type").value,
+              banner: document.querySelector("#restored-banner").hidden,
+              stored: localStorage.getItem("hc-filters"),
+              count: dom.writes["#count:text"]};
+    })()""")
+    assert result["q"] == ""
+    assert result["type"] == ""
+    assert result["banner"] is True
+    assert result["stored"] is None
+    assert result["count"].startswith("2 / 2")
+
+
+def test_the_lan_viewer_neither_stores_nor_restores():
+    # The phone does not hold catalog.db, so storage there is not "local to
+    # the machine that already has the library": it would leave author and
+    # tag names on a device that paired once.
+    result = _filters("""(() => {
+      app.setReadOnly(true);
+      localStorage.setItem("hc-filters", '{"q": "axe"}');
+      const restored = app.restoreFilters();
+      app.setSearch("bright");
+      app.render();
+      const stored = localStorage.getItem("hc-filters");
+      app.setReadOnly(false);
+      return {restored, stored};
+    })()""")
+    assert result["restored"] is False
+    assert result["stored"] == '{"q": "axe"}'   # untouched, neither read nor written
