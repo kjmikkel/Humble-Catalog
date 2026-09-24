@@ -373,8 +373,10 @@ function personField(i) {
 // .length off an absent field would throw before it ever got there.
 const person = (i) => (i.narrator || []).length ? i.narrator : (i.illustrator || []);
 
-// The rows the viewer is currently showing: the bulk bar's target and the
-// export's payload. `filtered` says whether the view is actually narrowed:
+// Every row the current filters and search match: the bulk bar's target
+// and the export's payload. Deliberately NOT the rows drawn -- render()
+// stops at ROW_CAP (#52), and a bulk edit or export that quietly dropped
+// the undrawn rest would act on a set nobody chose. `filtered` says whether the view is actually narrowed:
 // bulk removal is gated on it, so "remove from every item" is never one
 // click away.
 function shownRows() {
@@ -511,7 +513,7 @@ function renderExportButton() {
   btn.disabled = count === 0 || exportColumns.size === 0;
 }
 
-// The rows on screen, posted as ids because the filter predicate lives
+// Every matched row (see shownRows -- drawn or not), posted as ids because the filter predicate lives
 // here and not on the server. A Blob rather than a plain link: the request
 // has to be a POST, since ids in a query string would put a description of
 // the library into access logs and browser history.
