@@ -3420,3 +3420,86 @@ def test_keys_emptied_by_chips_alone_still_points_at_the_states():
     })()''')
     assert "No keys match these filters. Try another state above" in html
     assert "that search" not in html
+
+
+# ---- Coalescing renders while typing (#52) --------------------------------
+# Measured before building this: render() rebuilds the whole <tbody> through
+# innerHTML at roughly 70us per row, so at a few thousand rows one keystroke
+# costs 100-200ms and a burst of them queues a full rebuild each. visible()
+# is not the cost -- fuzzy scoring the whole catalog runs in under 2ms.
+
+def _burst(body):
+    """Run `body` with frames and timers captured instead of scheduled."""
+    return eval_js("""(() => {
+      const cancelled = {frame: 0, timer: 0};
+      const frames = [];
+      const timers = [];
+      globalThis.requestAnimationFrame = (fn) => { frames.push(fn); return frames.length; };
+      globalThis.cancelAnimationFrame = () => { cancelled.frame += 1; };
+      globalThis.setTimeout = (fn, ms) => { timers.push([fn, ms]); return timers.length; };
+      globalThis.clearTimeout = () => { cancelled.timer += 1; };
+      app.setItems(%s);
+      dom.reset();
+      return (%s);
+    })()""" % (json.dumps([_item(id=1, name="Axebearer")]), body))
+
+
+def test_a_burst_of_keystrokes_coalesces_into_one_render():
+    result = _burst("""(() => {
+      for (let i = 0; i < 6; i++) app.scheduleRender();
+      const duringBurst = dom.writes["#count:text"] ?? null;
+      frames.forEach((fn) => fn());
+      return {framesAsked: frames.length, duringBurst,
+              afterFrame: dom.writes["#count:text"] ?? null};
+    })()""")
+    # Six keystrokes, one frame asked for, and nothing drawn until it comes.
+    assert result["framesAsked"] == 1
+    assert result["duringBurst"] is None
+    assert result["afterFrame"] is not None
+
+
+def test_a_render_still_arrives_when_frames_never_come():
+    # The trap openSheet already documents: requestAnimationFrame does not
+    # fire in a hidden or throttled tab. A frame-only debounce would leave
+    # the table showing the result of a query the box no longer holds.
+    result = _burst("""(() => {
+      app.scheduleRender();
+      const beforeTimer = dom.writes["#count:text"] ?? null;
+      timers.forEach(([fn]) => fn());       // the frame never came; the timer did
+      return {timersSet: timers.length, beforeTimer,
+              afterTimer: dom.writes["#count:text"] ?? null};
+    })()""")
+    assert result["timersSet"] == 1
+    assert result["beforeTimer"] is None
+    assert result["afterTimer"] is not None
+
+
+def test_whichever_arrives_first_cancels_the_other_and_renders_once():
+    result = _burst("""(() => {
+      app.scheduleRender();
+      frames.forEach((fn) => fn());         // frame wins
+      const afterFrame = dom.writes["#count:text"];
+      dom.reset();
+      timers.forEach(([fn]) => fn());       // the loser must be a no-op
+      return {afterFrame, afterStaleTimer: dom.writes["#count:text"] ?? null,
+              cancelledTimer: cancelled.timer};
+    })()""")
+    assert result["afterFrame"] is not None
+    assert result["afterStaleTimer"] is None
+    assert result["cancelledTimer"] == 1
+
+
+def test_a_later_keystroke_schedules_a_fresh_render():
+    # The handle has to clear when it fires, or the table freezes after
+    # the first render of the session.
+    result = _burst("""(() => {
+      app.scheduleRender();
+      frames.forEach((fn) => fn());
+      dom.reset();
+      app.scheduleRender();
+      frames.slice(1).forEach((fn) => fn());
+      return {framesAsked: frames.length,
+              rendered: dom.writes["#count:text"] ?? null};
+    })()""")
+    assert result["framesAsked"] == 2
+    assert result["rendered"] is not None
