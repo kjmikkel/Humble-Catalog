@@ -3503,3 +3503,119 @@ def test_a_later_keystroke_schedules_a_fresh_render():
     })()""")
     assert result["framesAsked"] == 2
     assert result["rendered"] is not None
+
+
+# ---- Capping the rendered rows (#52) ---------------------------------------
+# The debounce coalesces a burst, but each render still pays ~70us a row
+# for every row in the DOM, and a table that size also makes any layout read
+# (the search box's autocomplete positioning) cost tens of milliseconds. So
+# only the first ROW_CAP rows are drawn, with a line that says so.
+
+def _capped(n, body, narrow=False):
+    """Render n items (names "Item 1".."Item n"), then evaluate `body`.
+
+    The catalog is built inside the script from one template item: n
+    serialised items overflow the command line on Windows.
+    """
+    return eval_js("""(() => {
+      %s
+      const base = %s;
+      app.setItems(Array.from({length: %d},
+        (_, k) => ({...base, id: k + 1, name: `Item ${k + 1}`})));
+      app.setSort("name", true);
+      app.render();
+      return (%s);
+    })()""" % ("globalThis.matchMedia = () => ({matches: true});" if narrow else "",
+               json.dumps(_item()), n, body))
+
+
+def _rows(html):
+    return html.count("<tr")
+
+
+def test_a_long_list_draws_only_the_first_rows_and_says_so():
+    result = _capped(250, """({cap: app.ROW_CAP,
+                              table: dom.writes["#catalog tbody"],
+                              count: dom.writes["#count:text"]})""")
+    cap = result["cap"]
+    assert cap < 250
+    # the cap's rows plus the one line saying what was left out
+    assert _rows(result["table"]) == cap + 1
+    assert f"first {cap} of 250" in result["table"]
+    assert 'class="show-all"' in result["table"]
+    # The count is of what matched, not of what was drawn: the bulk bar and
+    # the export act on every matching row, and the count must agree.
+    assert result["count"].startswith("250 / 250")
+
+
+def test_a_list_at_the_cap_draws_every_row_and_no_more_line():
+    table = _capped(200, 'dom.writes["#catalog tbody"]')
+    assert eval_js("app.ROW_CAP") == 200
+    assert _rows(table) == 200
+    assert "show-all" not in table
+
+
+def test_show_all_draws_every_row_and_moves_focus_to_the_first_new_one():
+    result = _capped(250, """(() => {
+      dom.reset();
+      app.showAllRows();
+      return {table: dom.writes["#catalog tbody"], focused: dom.focused};
+    })()""")
+    assert _rows(result["table"]) == 250
+    assert "show-all" not in result["table"]
+    # The button removes itself; the keyboard lands where reading continues,
+    # not on <body>.
+    assert result["table"].count("data-revealed") == 1
+    assert result["focused"][-1] == "#catalog tbody [data-revealed]"
+
+
+def test_redrawing_the_same_view_keeps_it_expanded():
+    # Rating a star or saving an edit re-renders; neither changed what the
+    # list is of, so neither may snap it back to the cap.
+    table = _capped(250, """(() => {
+      app.showAllRows();
+      app.render();
+      return dom.writes["#catalog tbody"];
+    })()""")
+    assert _rows(table) == 250
+
+
+def test_a_new_query_collapses_an_expanded_list():
+    # Typing is the hot path the cap exists for: an expanded list must not
+    # make every later keystroke pay for the whole catalog again.
+    table = _capped(250, """(() => {
+      app.showAllRows();
+      app.setSearch("Item");
+      app.render();
+      return dom.writes["#catalog tbody"];
+    })()""")
+    assert _rows(table) == eval_js("app.ROW_CAP") + 1
+
+
+def test_the_phone_cards_are_capped_too():
+    result = _capped(250, """(() => {
+      const before = dom.writes["#card-list"];
+      app.showAllRows();
+      return {before, after: dom.writes["#card-list"], focused: dom.focused};
+    })()""", narrow=True)
+    cap = eval_js("app.ROW_CAP")
+    assert result["before"].count("<article") == cap
+    assert f"first {cap} of 250" in result["before"]
+    assert result["after"].count("<article") == 250
+    assert result["focused"][-1] == "#card-list [data-revealed]"
+
+
+def test_the_bulk_target_is_every_matching_row_not_only_the_drawn_ones():
+    state = _capped(250, "app.shownRows()")
+    assert state["count"] == 250
+
+
+def test_resorting_an_expanded_list_keeps_it_expanded():
+    # A header click reorders the same set; the user asked to see all of it.
+    table = _capped(250, """(() => {
+      app.showAllRows();
+      app.setSort("name", false);
+      app.render();
+      return dom.writes["#catalog tbody"];
+    })()""")
+    assert _rows(table) == 250

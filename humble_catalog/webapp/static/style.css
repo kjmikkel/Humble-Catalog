@@ -173,6 +173,11 @@ section[id^="section-"][hidden] { display: none; }
                   padding: 2rem 1rem; font-style: italic; }
 .list-empty { color: var(--muted); text-align: center; padding: 2rem 1rem;
               font-style: italic; margin: 0; }
+/* The line under a list capped at ROW_CAP (#52): what was left out, and
+   the button that draws it. Muted like the empty line, but upright -- it
+   holds a control, not a verdict. */
+.table-more td, .list-more { color: var(--muted); text-align: center;
+                             padding: 1rem; margin: 0; }
 .active-x { background: none; border: none; cursor: pointer;
             color: var(--accent); font-size: 1rem; line-height: 1;
             padding: 0 0 0 .25rem; }
