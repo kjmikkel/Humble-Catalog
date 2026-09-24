@@ -25,9 +25,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from humble_catalog import db                          # noqa: E402
+from humble_catalog.titles import clean_game_title     # noqa: E402
 from humble_catalog.webapp import create_app           # noqa: E402
 
 PORT = 8099
+
+# The date the demo's one game-library import claims to have run.
+DEMO_IMPORTED_AT = "2026-01-01T00:00:00+00:00"
 
 DEMO_BUNDLES = [
     ("bk1", "Humble Book Bundle: Test by Example Press", "2020-03-02"),
@@ -35,7 +39,46 @@ DEMO_BUNDLES = [
      "2021-06-14"),
     ("cm1", "Humble Comics Bundle: Shadow Hound", "2022-01-09"),
     ("gm1", "Humble Game Bundle: Samples", "2023-08-21"),
+    ("kv1", "Humble Game Bundle: Key Vault", "2024-01-02"),
+    ("ex1", "Humble Game Bundle: Expiring Keys", "2024-05-06"),
 ]
+
+# An imported Steam library, so the Keys panel has a store it can check
+# against. uplay is deliberately absent: a key for a store with no import
+# is how a row reaches the "No importer" chip, and that distinction is
+# the one the panel exists to draw.
+#
+# Every title is from docs/TEST-DATA.md.
+DEMO_GAMES = [
+    ("steam", "g3001", "Widget Quest"),
+    ("steam", "g3002", "Neon Drifter"),
+    ("steam", "g3003", "Starfall Rally"),
+]
+
+# One key per state the report can produce, because the panel's four
+# chips and its three empty-state messages are all decided by this
+# spread. States are derived, never stored -- keys.report classifies each
+# row against DEMO_GAMES -- so what is seeded here is the evidence:
+#   Widget Quest         in the library          -> matched (counted only)
+#   Starfall Rally Turbo near Starfall Rally     -> uncertain
+#   Cinder Vale          steam, no match         -> unredeemed, and hidden
+#   Amber Hollow         live expiry_date        -> unredeemed, expiring
+#   Glass Meridian       expiry_date long past   -> unredeemed, expired
+#   Verdant Reach        uplay, never imported   -> uncheckable
+DEMO_KEYS = [
+    ("kv1", "widgetquest_steam", "Widget Quest", "steam", {}),
+    ("kv1", "starfallturbo_steam", "Starfall Rally Turbo", "steam", {}),
+    ("kv1", "cindervale_steam", "Cinder Vale", "steam", {}),
+    ("kv1", "verdantreach_uplay", "Verdant Reach", "uplay", {}),
+    ("ex1", "amberhollow_steam", "Amber Hollow", "steam",
+     {"expiry_date": "2099-08-11T00:00:00"}),
+    ("ex1", "glassmeridian_steam", "Glass Meridian", "steam",
+     {"expiry_date": "2020-02-29T00:00:00"}),
+]
+
+# (gamekey, machine_name) of the one key the owner has marked resolved,
+# so the Hidden chip is not permanently empty.
+DEMO_HIDDEN = [("kv1", "cindervale_steam", "2026-07-31T00:00:00+00:00")]
 
 # A spread chosen to light up the viewer's surfaces, not just one
 # feature: every type, a same-type duplicate pair for the Duplicates
@@ -128,7 +171,8 @@ def seed(db_path):
     """
     conn = db.connect(db_path)
     # Child-first, so foreign keys stay satisfied while emptying.
-    for table in ("item_bundles", "enrichment", "items", "bundles"):
+    for table in ("item_bundles", "enrichment", "items", "hidden_keys",
+                  "external_keys", "games", "game_imports", "bundles"):
         conn.execute(f"DELETE FROM {table}")
     for gamekey, name, purchased in DEMO_BUNDLES:
         conn.execute(
@@ -164,6 +208,25 @@ def seed(db_path):
              db.tags_to_json(row.get("illustrator")),
              row.get("status", "matched"),
              json.dumps(row["candidates"]) if row.get("candidates") else None))
+    for store, store_id, title in DEMO_GAMES:
+        conn.execute(
+            "INSERT INTO games (store, store_id, title, normalized_title, "
+            "imported_at, source_timestamp) VALUES (?,?,?,?,?,?)",
+            (store, store_id, title, clean_game_title(title),
+             DEMO_IMPORTED_AT, None))
+    conn.execute(
+        "INSERT INTO game_imports (store, imported_at, count, source) "
+        "VALUES (?,?,?,?)",
+        ("steam", DEMO_IMPORTED_AT, len(DEMO_GAMES), "demo"))
+    for gamekey, machine_name, human_name, key_type, raw in DEMO_KEYS:
+        conn.execute(
+            "INSERT INTO external_keys (gamekey, machine_name, human_name, "
+            "key_type, raw) VALUES (?,?,?,?,?)",
+            (gamekey, machine_name, human_name, key_type, json.dumps(raw)))
+    for gamekey, machine_name, hidden_at in DEMO_HIDDEN:
+        conn.execute(
+            "INSERT INTO hidden_keys (gamekey, machine_name, hidden_at) "
+            "VALUES (?,?,?)", (gamekey, machine_name, hidden_at))
     conn.commit()
     conn.close()
 
@@ -191,7 +254,8 @@ def main():
     db_path = Path(tempfile.gettempdir()) / "humble-catalog-demo.db"
     seed(db_path)
     print(f"Demo catalog: {db_path}")
-    print(f"Serving {len(DEMO_ROWS)} invented items on "
+    print(f"Serving {len(DEMO_ROWS)} invented items and "
+          f"{len(DEMO_KEYS)} invented keys on "
           f"http://127.0.0.1:{PORT}  (Ctrl+C to stop)")
     make_app(db_path).run(host="127.0.0.1", port=PORT)
 

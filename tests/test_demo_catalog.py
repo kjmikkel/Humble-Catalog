@@ -47,6 +47,66 @@ def test_every_row_lands_in_a_bundle(tmp_path):
     assert all(i["bundles"] for i in db.fetch_items(db.connect(dbp)))
 
 
+# ---- Demo keys -----------------------------------------------------------
+# The Keys panel decides everything it shows -- four chips, three empty
+# messages, the expiry column -- from state the report DERIVES rather
+# than reads, so seeding a chip means seeding its evidence. Without rows
+# here the panel only ever renders its "nothing fetched" branch, and no
+# visual check of it means anything.
+from humble_catalog import keys as keys_report         # noqa: E402
+
+
+def _report(tmp_path):
+    dbp = tmp_path / "demo.db"
+    demo_catalog.seed(dbp)
+    return keys_report.report(db.connect(dbp))
+
+
+def test_seed_covers_every_key_state(tmp_path):
+    # A state with no row is a chip that cannot be eyeballed, which is
+    # the same gap test_seed_covers_every_item_type closes for Library.
+    counts = _report(tmp_path)["counts"]
+    assert all(counts[state] for state in keys_report.STATES), counts
+
+
+def test_the_uncheckable_row_comes_from_a_store_with_no_import(tmp_path):
+    # "No importer" must not be faked with a state column: it is the
+    # absence of a game_imports row, and seeding an uplay import would
+    # silently empty that chip.
+    report = _report(tmp_path)
+    assert "uplay" not in report["libraries"]
+    assert [r["product"] for r in report["rows"]
+            if r["state"] == "uncheckable"] == ["Verdant Reach"]
+
+
+def test_the_keys_spread_shows_a_hide_and_both_sides_of_an_expiry(tmp_path):
+    # The Hidden chip, the "expired" cell and a live countdown are three
+    # more surfaces that render only if some row carries them.
+    rows = _report(tmp_path)["rows"]
+    assert any(r["hidden_at"] for r in rows)
+    assert any(r["expired"] for r in rows)
+    assert any(r["expires"] and not r["expired"] for r in rows)
+
+
+def test_the_uncertain_row_names_what_it_nearly_matched(tmp_path):
+    # An uncertain row with no near_match would render the panel's
+    # "~ title (score)" hint empty.
+    near = [r["near_match"] for r in _report(tmp_path)["rows"]
+            if r["state"] == "uncertain"]
+    assert near and all(n and n["owned_title"] for n in near)
+
+
+def test_seeding_keys_twice_does_not_trip_their_primary_keys(tmp_path):
+    # external_keys is keyed on (gamekey, machine_name) and hidden_keys
+    # on the same pair, so both need clearing before a reseed -- and
+    # main() reseeds the same temp file on every run.
+    dbp = tmp_path / "demo.db"
+    demo_catalog.seed(dbp)
+    demo_catalog.seed(dbp)
+    assert keys_report.report(db.connect(dbp))["total"] == len(
+        demo_catalog.DEMO_KEYS)
+
+
 # ---- Demo covers ---------------------------------------------------------
 # Invented covers, committed as SVG so leak_check reads the titles inside
 # them like any other tracked text (a PNG would be pixels only a person

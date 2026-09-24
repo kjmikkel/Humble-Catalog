@@ -3378,3 +3378,45 @@ def test_library_search_is_hidden_outside_library_and_restored_on_return():
       return {hidden, query: document.querySelector("#search").value};
     })()''')
     assert result == {"hidden": [True, True, True, True, False], "query": "retained query"}
+
+
+def test_keys_emptied_by_the_search_box_does_not_blame_the_state_chips():
+    # The chips are still all on here: the only thing narrowing the list
+    # is the text box, so pointing at "another state above" sends the user
+    # to the one control that cannot bring a row back.
+    html = _with_keys('''(() => {
+      document.querySelector("#keys-search").value = "zzz-no-such-key";
+      app.renderKeys();
+      return dom.writes["#keys-panel"];
+    })()''')
+    assert "No keys match that search" in html
+    assert "Try another state above" not in html
+    assert "No Humble keys have been fetched" not in html
+    assert 'id="key-table-wrap" hidden' in html
+
+
+def test_keys_emptied_by_search_and_chips_together_names_both_controls():
+    # "amber" alone matches a row and the uncheckable chip alone matches a
+    # row; it is only their intersection that is empty, so neither control
+    # can be blamed on its own and the message says so.
+    html = _with_keys('''(() => {
+      document.querySelector("#keys-search").value = "amber";
+      app.setKeyStates(["uncheckable"]);
+      app.renderKeys();
+      return dom.writes["#keys-panel"];
+    })()''')
+    assert "No keys match that search in the states shown" in html
+    assert "Clear the box to see all keys" not in html
+
+
+def test_keys_emptied_by_chips_alone_still_points_at_the_states():
+    # The search box holds a query that matches on its own, and the chips
+    # match nothing: the search is answerable, the chips are not.
+    html = _with_keys('''(() => {
+      document.querySelector("#keys-search").value = "amber";
+      app.setKeyStates([]);
+      app.renderKeys();
+      return dom.writes["#keys-panel"];
+    })()''')
+    assert "No keys match these filters. Try another state above" in html
+    assert "that search" not in html
