@@ -402,8 +402,8 @@ function renderBulkBar() {
   const {count, filtered} = shownRows();
   const tag = $("#bulk-tag").value.trim();
   const addBtn = $("#bulk-add"), removeBtn = $("#bulk-remove");
-  addBtn.textContent = `Add to ${count} shown`;
-  removeBtn.textContent = `Remove from ${count} shown`;
+  addBtn.textContent = `Add to ${count} matching`;
+  removeBtn.textContent = `Remove from ${count} matching`;
   addBtn.disabled = !tag || count === 0;
   // Removing is unrecoverable -- user_tags has no pre_edit snapshot -- so
   // it needs an actual filter, not just a confirmation.
@@ -509,7 +509,7 @@ function toggleColumn(name, on) {
 function renderExportButton() {
   const {count, filtered} = shownRows();
   const btn = $("#export");
-  btn.textContent = filtered ? `Download ${count} shown` : "Download all";
+  btn.textContent = filtered ? `Download ${count} matching` : "Download all";
   btn.disabled = count === 0 || exportColumns.size === 0;
 }
 
