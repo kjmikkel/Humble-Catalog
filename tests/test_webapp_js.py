@@ -586,8 +586,52 @@ def test_export_button_says_download_all_when_unfiltered():
 def test_export_button_shows_the_row_count_when_filtered():
     # the label doubles as the blast-radius readout, like the bulk bar
     state = _export_button(3, "keep")
-    assert state["label"] == "Download 1 shown"
+    assert state["label"] == "Download 1 matching"
     assert state["disabled"] is False
+
+
+def _labels_past_the_cap():
+    """Export and bulk labels over a filter matching more than ROW_CAP.
+
+    One unmatched item keeps the view `filtered`; the rest all match, so
+    the count exceeds what render() draws.
+    """
+    # Cloned in JS from one template: 251 serialized items overflow the
+    # Windows command-line limit eval_js passes the script through.
+    return eval_js(
+        """(() => {
+             const n = app.ROW_CAP + 50, base = %s;
+             const rows = [];
+             for (let i = 1; i <= n + 1; i++) {
+               rows.push({...base, id: i, name: `Item ${i}`,
+                          user_comment: i <= n ? "keep" : null});
+             }
+             app.setItems(rows);
+             for (const f of Object.values(app.chipFilters)) {
+               f.chips = []; f.text = "";
+             }
+             app.chipFilters.user_comment.text = "keep";
+             app.renderExportButton();
+             app.renderBulkBar();
+             return {n, export: dom.writes["#export:text"],
+                     add: dom.writes["#bulk-add:text"],
+                     remove: dom.writes["#bulk-remove:text"]};
+           })()""" % json.dumps(_item(id=0, name="template")))
+
+
+def test_export_label_counts_matches_not_drawn_rows():
+    # #85: the list draws ROW_CAP rows, the export carries every match.
+    # "shown" would describe the drawn rows, so the label must not say it.
+    s = _labels_past_the_cap()
+    assert s["export"] == f"Download {s['n']} matching"
+
+
+def test_bulk_labels_count_matches_not_drawn_rows():
+    # #85: a bulk tag reaches undrawn matches too, which is exactly what
+    # the label has to own up to before the click.
+    s = _labels_past_the_cap()
+    assert s["add"] == f"Add to {s['n']} matching"
+    assert s["remove"] == f"Remove from {s['n']} matching"
 
 
 def test_export_button_is_disabled_with_nothing_to_export():
