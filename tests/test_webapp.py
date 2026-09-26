@@ -3314,3 +3314,57 @@ def test_serve_still_refuses_a_port_something_else_holds(
     _seed(dbp)
     with pytest.raises(SystemExit, match="cannot listen"):
         webmod.serve(db_path=str(dbp), port=srv.server_port)
+
+
+# -- What a first run on an empty catalog still needs (#99) --------------
+# The empty table said "run Fetch new bundles", which fails with no saved
+# login. /api/setup reports the state the Library's first-run checklist
+# ticks from. It reads no cookie and makes no request: a login is "saved"
+# once the browser profile `login` writes exists, which is exactly what a
+# first run lacks. Whether it is still valid is for the fetch to say.
+
+def _setup_client(tmp_path, profile=False):
+    dbp = tmp_path / "catalog.db"
+    db.connect(dbp).close()
+    app = create_app(db_path=str(dbp))
+    app.config["PROFILE_DIR"] = str(tmp_path / ".playwright-profile")
+    if profile:
+        (tmp_path / ".playwright-profile").mkdir()
+    return dbp, app.test_client()
+
+
+def test_setup_on_a_first_run_has_nothing_done(tmp_path):
+    _dbp, client = _setup_client(tmp_path)
+    assert client.get("/api/setup").get_json() == {
+        "login_saved": False, "game_stores": 0}
+
+
+def test_setup_sees_a_saved_login(tmp_path):
+    _dbp, client = _setup_client(tmp_path, profile=True)
+    assert client.get("/api/setup").get_json()["login_saved"] is True
+
+
+def test_setup_counts_imported_game_stores(tmp_path):
+    dbp, client = _setup_client(tmp_path)
+    conn = db.connect(dbp)
+    conn.execute("INSERT INTO game_imports VALUES "
+                 "('steam', '2026-09-26T00:00:00+00:00', 3, 'test')")
+    conn.commit()
+    conn.close()
+    assert client.get("/api/setup").get_json()["game_stores"] == 1
+
+
+def test_the_profile_defaults_to_where_login_saves_it(tmp_path):
+    # humble_api's profile_dir default; a mismatch would tick nothing.
+    import inspect
+    from humble_catalog import humble_api
+    default = inspect.signature(humble_api.login).parameters[
+        "profile_dir"].default
+    app = create_app(db_path=str(tmp_path / "catalog.db"))
+    assert app.config["PROFILE_DIR"] == default
+
+
+def test_the_lan_viewer_has_no_setup_route(tmp_path):
+    _app, client = _lan_client(tmp_path)
+    _paired(client)
+    assert client.get("/api/setup", base_url=LAN_BASE).status_code == 404

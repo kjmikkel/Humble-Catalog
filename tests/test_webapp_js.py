@@ -4036,3 +4036,126 @@ def test_an_expired_session_without_a_terminal_names_the_command():
              finished_at: "2026-09-26T00:01:00+00:00"}})""")
     assert 'data-handoff="1"' not in html
     assert "python -m humble_catalog login" in html
+
+
+# -- The empty Library walks a first run through (#99) -------------------
+# "run Fetch new bundles in Tasks" was the whole guidance, and a fetch with
+# no saved login fails. The checklist says the order, and ticks from
+# /api/setup what is already done.
+
+def _first_run(setup, available=True, read_only=False, narrow=False):
+    return eval_js("""(() => {
+      dom.reset();
+      app.setReadOnly(%s);
+      app.setHandoffAvailable(%s);
+      app.setSetupState(%s);
+      app.setItems([]);
+      app.setSearch("");
+      globalThis.matchMedia = () => ({matches: %s});
+      app.render();
+      const out = dom.writes[%s];
+      app.setReadOnly(false);
+      app.setHandoffAvailable(true);
+      app.setSetupState(null);
+      delete globalThis.matchMedia;
+      return out;
+    })()""" % (json.dumps(read_only), json.dumps(available),
+               json.dumps(setup), json.dumps(narrow),
+               json.dumps("#card-list" if narrow else "#catalog tbody")))
+
+
+_NOTHING_DONE = {"login_saved": False, "game_stores": 0}
+
+
+def _steps(html):
+    """Each checklist step's markup, in order."""
+    return html.split("<li")[1:]
+
+
+def test_a_first_run_lists_login_then_fetch_then_the_extras():
+    steps = _steps(_first_run(_NOTHING_DONE))
+    assert len(steps) == 3
+    assert "Log in" in steps[0]
+    assert "Update everything" in steps[1]
+    assert "game libraries" in steps[2] and "API keys" in steps[2]
+
+
+def test_login_is_the_handoff_button_when_a_terminal_is_there():
+    login = _steps(_first_run(_NOTHING_DONE))[0]
+    assert 'data-command="login"' in login and 'data-handoff="1"' in login
+
+
+def test_login_names_the_command_when_there_is_no_terminal():
+    login = _steps(_first_run(_NOTHING_DONE, available=False))[0]
+    assert 'data-handoff' not in login
+    assert "python -m humble_catalog login" in login
+
+
+def test_nothing_is_ticked_on_a_first_run():
+    assert 'data-done' not in _first_run(_NOTHING_DONE)
+
+
+def test_a_saved_login_is_ticked():
+    steps = _steps(_first_run({"login_saved": True, "game_stores": 0}))
+    assert 'data-done="1"' in steps[0]
+    assert 'data-done' not in steps[1] + steps[2]
+
+
+def test_imported_games_are_ticked():
+    steps = _steps(_first_run({"login_saved": False, "game_stores": 2}))
+    assert 'data-done="1"' in steps[2]
+    assert 'data-done' not in steps[0] + steps[1]
+
+
+def test_the_checklist_links_to_tasks():
+    assert 'href="#/tasks"' in _first_run(_NOTHING_DONE)
+
+
+def test_the_narrow_card_list_gets_the_checklist_too():
+    assert len(_steps(_first_run(_NOTHING_DONE, narrow=True))) == 3
+
+
+def test_the_lan_viewer_gets_no_checklist():
+    # It has no Tasks section, no handoff and no /api/setup.
+    html = _first_run(_NOTHING_DONE, read_only=True)
+    assert "<li" not in html and "Tasks" not in html
+
+
+def test_without_setup_state_the_line_still_points_to_tasks():
+    # /api/setup failed, or has not answered yet.
+    html = _first_run(None)
+    assert "<li" not in html and "Update everything" in html
+
+
+def _load_fetches(items, setup_fails=False):
+    return eval_js("""(async () => {
+      dom.reset();
+      const seen = [];
+      app.setFetch((url) => {
+        seen.push(url);
+        if (url === "/api/setup" && %s)
+          return Promise.reject(new Error("down"));
+        const body = url === "/api/items" ? {items: %s}
+          : url === "/api/setup" ? {login_saved: true, game_stores: 0}
+          : {};
+        return Promise.resolve({json: () => Promise.resolve(body)});
+      });
+      await app.load();
+      return {seen, tbody: dom.writes["#catalog tbody"]};
+    })()""" % (json.dumps(setup_fails), json.dumps(items)))
+
+
+def test_load_asks_for_setup_state_only_when_the_catalog_is_empty():
+    assert "/api/setup" in _load_fetches([])["seen"]
+    full = [_item(id=1, name="A Quiet Life in Harbors")]
+    assert "/api/setup" not in _load_fetches(full)["seen"]
+
+
+def test_load_draws_the_checklist_from_setup_state():
+    tbody = _load_fetches([])["tbody"]
+    assert 'data-done="1"' in _steps(tbody)[0]
+
+
+def test_a_failed_setup_fetch_still_draws_the_empty_line():
+    tbody = _load_fetches([], setup_fails=True)["tbody"]
+    assert "No items in the catalog yet" in tbody and "<li" not in tbody

@@ -173,6 +173,15 @@ section[id^="section-"][hidden] { display: none; }
                   padding: 2rem 1rem; font-style: italic; }
 .list-empty { color: var(--muted); text-align: center; padding: 2rem 1rem;
               font-style: italic; margin: 0; }
+/* The first-run steps under the empty line (#99): read as instructions,
+   so upright, left-aligned and in the body colour. Anchored to the
+   start of the cell, not centred: the cell spans every column and the
+   table is wider than its scroller, so a centred list ran off the right
+   edge. */
+.first-run { display: block; text-align: left; font-style: normal;
+             color: var(--fg); margin: 1rem 0 0; line-height: 1.8;
+             max-width: 32rem; }
+.first-run-done { color: var(--accent); font-weight: bold; }
 /* The filters-restored banner (#44). Accent-edged rather than a warning:
    nothing is wrong, the table is just narrower than a fresh page. */
 #restored-banner { display: flex; flex-wrap: wrap; align-items: center;
