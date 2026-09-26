@@ -151,7 +151,8 @@ def preview(conn, hub):
         if verdict == "owned":
             owned_items.append(title)
         elif verdict == "possible":
-            possible_items.append(match)
+            possible_items.append(
+                {**match, "strength": bundle_preview.strength(match["score"])})
         else:
             new_items.append(title)
             # Only a `new` verdict counts toward the warning. A `possible`

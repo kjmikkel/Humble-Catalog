@@ -1038,3 +1038,51 @@ def test_a_range_counts_only_the_volumes_inside_it():
         "already_owned": False, "kind": "collection", "offered_volume": None,
         "owned": [1, 2, 9], "owned_display": "Vol. 1-2, 9", "span": [1, 6],
     }) == "you own 2 of 6 (Vol. 1-2, 9)"
+
+
+# -- A word for the score (#93) ------------------------------------------
+# "(0.91)" did not say what scale it was on or which way was better. Each
+# scored entry now carries a word, from one line shared by both panels;
+# the number stays in the payload for the tooltip and the CLI.
+
+@pytest.mark.parametrize("score,word", [
+    (1.0, "close match"), (0.95, "close match"),
+    (0.94, "loose match"), (0.90, "loose match"), (0.80, "loose match"),
+])
+def test_strength_splits_at_the_close_line(score, word):
+    assert bundle_preview.strength(score) == word
+
+
+def test_the_close_line_sits_inside_the_overlap_band():
+    # Otherwise every book overlap would read the same word.
+    assert bundle_preview.OVERLAP < bundle_preview.CLOSE <= 100
+
+
+def test_every_overlap_carries_its_word(tmp_path):
+    # _overlaps(tmp_path) is empty since its omnibus titles became series
+    # lines, so this builds the genuine overlap the item-id test uses.
+    conn = db.connect(tmp_path / "overlap.db")
+    conn.execute("INSERT INTO items (machine_name, name, type) "
+                 "VALUES ('widgetservices_examplepress', "
+                 "'Building Widget Services, 2nd Edition', 'ebook')")
+    conn.commit()
+    bundle = {
+        "basic_data": {"human_name": "The World of Examplia by Example Press"},
+        "tier_pricing_data": {"initial": {"price|money": {"amount": 5.0}}},
+        "tier_item_data": {"widgetservices_2e_examplepress": {
+            "human_name": "Building Widget Services 2e"}},
+        "tier_display_data": {"initial": {
+            "tier_item_machine_names": ["widgetservices_2e_examplepress"]}},
+    }
+    try:
+        overlaps = bundle_preview.preview(conn, bundle)["overlaps"]
+    finally:
+        conn.close()
+    assert overlaps
+    assert overlaps[0]["strength"] == "close match"      # scores 1.00
+
+
+def test_a_game_tier_possible_carries_its_word(tmp_path):
+    possible = _game_tiers(tmp_path)[0]["possible_items"]
+    assert possible and all(
+        p["strength"] == bundle_preview.strength(p["score"]) for p in possible)

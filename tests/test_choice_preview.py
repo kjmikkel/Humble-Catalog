@@ -349,3 +349,11 @@ def test_the_fetched_page_feeds_preview_unchanged(tmp_path):
         conn.close()
     assert report["name"] == "Humble Choice: January 2031"
     assert (report["total"], report["owned"]) == (1, 1)
+
+
+def test_a_possible_carries_its_word(tmp_path):
+    # #93: the same word the bundle panel uses, from the same line.
+    from humble_catalog import bundle_preview
+    possible = _report(tmp_path)["possible_items"]
+    assert possible and all(
+        p["strength"] == bundle_preview.strength(p["score"]) for p in possible)
