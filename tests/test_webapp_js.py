@@ -1939,6 +1939,18 @@ def test_task_cards_cover_every_command_in_both_whitelists():
     assert handed == set(handoff.COMMANDS)
 
 
+def test_update_everything_is_the_first_card_and_group():
+    # #101: the one card a routine update needs.
+    first = eval_js("app.TASK_CARDS[0]")
+    assert first["command"] == "update"
+    assert eval_js("app.TASK_GROUPS[0]") == first["group"]
+    html = eval_js("(app.renderTasks(), dom.writes['#task-cards'])")
+    # Set apart from the individual steps, which follow under their own
+    # heading, so the one card a routine update needs is the obvious one.
+    assert "task-primary" in html
+    assert html.index("Update everything") < html.index("Individual steps")
+
+
 def test_tasks_gets_no_badge_even_with_a_job_running():
     # A badge means a queue you can empty, never an optional backlog, and
     # "you could run a harvest" is the definition of an optional backlog.

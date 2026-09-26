@@ -37,6 +37,7 @@ LOG_LINES = 500
 # (a typed confirmation, a file nobody holds open, a foreground browser
 # window) and is handled by the handoff in handoff.py, not by this runner.
 COMMANDS = {
+    "update":        {"games": "--games", "no_harvest": "--no-harvest"},
     "extract":       {"refetch": "--refetch"},
     "reparse":       {},
     "harvest":       {"ignore_quota": "--ignore-quota"},
@@ -52,8 +53,22 @@ COMMANDS = {
 # spell differently on the command line.
 CLI_NAME = {"import_games": "import-games", "import_sheets": "import-sheets"}
 
-# Flags the runner adds itself, whatever the request asked for.
-ALWAYS = {"extract": ["--no-login"]}
+# Flags the runner adds itself, whatever the request asked for. update
+# starts with extract, so it needs the same guard.
+ALWAYS = {"extract": ["--no-login"], "update": ["--no-login"]}
+
+
+def _row_commands(command):
+    """Every run_status row a job of `command` writes.
+
+    A plain command writes one row, under its CLI name. update also
+    drives other commands' steps, and each writes its own row as well.
+    """
+    name = CLI_NAME.get(command, command)
+    if command == "update":
+        from humble_catalog.update import STEP_COMMANDS
+        return (name, *STEP_COMMANDS)
+    return (name,)
 
 
 class Busy(Exception):
@@ -134,8 +149,8 @@ class JobRunner:
                 # row may also simply be stale. Refusing with the timestamp
                 # turns a silent double-run into a question the page can
                 # put to the user, who can then answer it with force.
-                raise Busy(f"a {command} run is already recorded as active "
-                           f"(last updated {live['updated_at']})")
+                raise Busy(f"a {live['command']} run is already recorded as "
+                           f"active (last updated {live['updated_at']})")
         with self._lock:
             if self._proc is not None and self._proc.poll() is None:
                 raise Busy(f"{self._job['command']} is already running")
@@ -226,12 +241,16 @@ class JobRunner:
         # the CLI handed to Progress, and import_sheets.py writes
         # 'import-sheets'. Under the underscored key this would find
         # nothing and the guard would quietly never fire.
+        #
+        # For update, any of its steps counts: a harvest started in a
+        # terminal would otherwise be run a second time as its step 2.
+        names = _row_commands(command)
         conn = self._conn()
         try:
             return conn.execute(
-                "SELECT updated_at FROM run_status "
-                "WHERE command=? AND phase != 'done'",
-                (CLI_NAME.get(command, command),)).fetchone()
+                "SELECT command, updated_at FROM run_status "
+                f"WHERE command IN ({','.join('?' * len(names))}) "
+                "AND phase != 'done'", names).fetchone()
         finally:
             conn.close()
 
@@ -242,13 +261,15 @@ class JobRunner:
         Progress.finish(), so its row would sit at phase='Bundle' forever
         and the viewer's banner would report a run that is over. The CLI
         has the same gap on Ctrl-C; this at least stops the runner adding
-        to it.
+        to it. For update that includes the row of whichever step it was
+        in, which never reached its own finish() either.
         """
+        names = _row_commands(command)
         conn = self._conn()
         try:
             conn.execute("UPDATE run_status SET phase='done', updated_at=? "
-                         "WHERE command=? AND phase != 'done'",
-                         (_now(), CLI_NAME.get(command, command)))
+                         f"WHERE command IN ({','.join('?' * len(names))}) "
+                         "AND phase != 'done'", (_now(), *names))
             conn.commit()
         finally:
             conn.close()

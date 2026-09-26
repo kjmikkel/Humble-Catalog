@@ -82,7 +82,8 @@ def main():
         prog="humble_catalog",
         description="Local searchable catalog of your HumbleBundle "
                     "e-books, audiobooks and comics.",
-        epilog="Usual order: 'extract' to fetch your library, 'harvest' to "
+        epilog="'update' runs the whole import below in one go. "
+               "Usual order: 'extract' to fetch your library, 'harvest' to "
                "fill the metadata cache (slow and resumable - Google Books' "
                "daily quota means several days), 'enrich' to match that "
                "cache to your items (seconds), then 'serve' to browse. If "
@@ -97,6 +98,25 @@ def main():
                            help="Fail if the saved session has expired "
                                 "instead of opening a login window (used by "
                                 "the viewer, which cannot show one)")
+    p_update = sub.add_parser(
+        "update",
+        help="The whole import in one go: extract, harvest, enrich, and "
+             "series from titles",
+        description="Runs extract, harvest, enrich and 'enrich --series' in "
+                    "that order, stopping at the first step that fails. A "
+                    "harvest that runs out of a source's daily quota does "
+                    "NOT stop it: enrichment uses what is cached, and "
+                    "running update again later picks the harvest up where "
+                    "it stopped.")
+    p_update.add_argument("--no-login", action="store_true",
+                          help="Fail if the saved session has expired "
+                               "instead of opening a login window (used by "
+                               "the viewer)")
+    p_update.add_argument("--games", action="store_true",
+                          help="Also import your game libraries at the end")
+    p_update.add_argument("--no-harvest", action="store_true",
+                          help="Skip the harvest: refresh from what is "
+                               "already cached (no metadata requests)")
     sub.add_parser("login", help="Open a browser to (re)log in to HumbleBundle")
     sub.add_parser("reparse", help="Re-classify items from the local cache (no network)")
     p_harvest = sub.add_parser(
@@ -271,6 +291,17 @@ def main():
             # A message and a non-zero exit, not a traceback: the viewer
             # shows the last log lines verbatim, and this is the one
             # failure it must translate into an action the user can take.
+            raise SystemExit("HumbleBundle session expired -- run "
+                             "'python -m humble_catalog login', then "
+                             "try again.")
+    elif args.command == "update":
+        from humble_catalog import humble_api, update
+        try:
+            update.run(allow_login=not args.no_login, games=args.games,
+                       no_harvest=args.no_harvest)
+        except humble_api.NotLoggedIn:
+            # The same words as extract's exit: the viewer's job panel
+            # recognises them and offers its Log in button.
             raise SystemExit("HumbleBundle session expired -- run "
                              "'python -m humble_catalog login', then "
                              "try again.")

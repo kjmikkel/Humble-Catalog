@@ -129,6 +129,39 @@ def test_import_sheets_dispatch_with_files(monkeypatch):
     main()
     assert calls["paths"] == ["a.xlsx"]
 
+def test_update_dispatch_passes_every_flag(monkeypatch):
+    calls = {}
+    monkeypatch.setattr("humble_catalog.update.run",
+                        lambda **kw: calls.update(kw))
+    monkeypatch.setattr(sys, "argv", ["humble_catalog", "update",
+                                      "--no-login", "--games", "--no-harvest"])
+    main()
+    assert calls == {"allow_login": False, "games": True, "no_harvest": True}
+
+
+def test_update_dispatch_defaults(monkeypatch):
+    calls = {}
+    monkeypatch.setattr("humble_catalog.update.run",
+                        lambda **kw: calls.update(kw))
+    monkeypatch.setattr(sys, "argv", ["humble_catalog", "update"])
+    main()
+    assert calls == {"allow_login": True, "games": False, "no_harvest": False}
+
+
+def test_update_with_an_expired_session_says_so_without_a_traceback(
+        monkeypatch):
+    # The viewer's job panel offers its Log in button when the log says
+    # "session expired" -- the same words extract's own exit uses.
+    from humble_catalog import humble_api
+
+    def logged_out(**kw):
+        raise humble_api.NotLoggedIn("no session")
+    monkeypatch.setattr("humble_catalog.update.run", logged_out)
+    monkeypatch.setattr(sys, "argv", ["humble_catalog", "update"])
+    with pytest.raises(SystemExit, match="session expired"):
+        main()
+
+
 def test_reset_dispatch(monkeypatch):
     calls = {}
     monkeypatch.setattr("humble_catalog.reset.run",
