@@ -196,15 +196,21 @@ class JobRunner:
         # to the child alone rather than to this console's whole group,
         # which would interrupt the viewer itself.
         #
-        # encoding is explicit: text=True alone decodes with the locale
-        # codepage (cp1252 on Windows) while the child writes UTF-8, which
-        # silently mangles every accented title in the log.
+        # UTF-8 on BOTH ends of the pipe, and neither is the default. The
+        # reader decodes explicitly because text=True alone would use the
+        # locale code page. The child needs telling too: a Python whose
+        # stdout is a pipe encodes with that same code page (cp1252 on
+        # Windows), so a title cp1252 lacks crashed the job and one it has
+        # reached the log as U+FFFD (#102). PYTHONIOENCODING rather than
+        # PYTHONUTF8 because it wins over UTF-8 mode, so an inherited value
+        # cannot put the two ends out of step again.
         creationflags = (subprocess.CREATE_NEW_PROCESS_GROUP
                          if sys.platform == "win32" else 0)
         return subprocess.Popen(
             line, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
-            cwd=os.getcwd(), creationflags=creationflags)
+            cwd=os.getcwd(), creationflags=creationflags,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"})
 
     def _conn(self):
         """A short-lived connection of this thread's own.
