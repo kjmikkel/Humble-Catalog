@@ -93,7 +93,10 @@ so rather than letting you discover it at the pip step.
 
 **`test` skips the JavaScript tests when Node is absent.** They execute
 the viewer's `app.js` in a stubbed DOM (`tests/js/harness.mjs`); the rest
-of the suite runs either way, so Node is optional.
+of the suite runs either way, so Node is optional. CI is the exception:
+it sets `HUMBLE_REQUIRE_NODE=1`, which makes a missing Node a failure
+rather than a skip, so the JS suite cannot quietly drop out of CI. Set
+it yourself if you want the same guarantee locally.
 
 **One test is Windows-only, so a macOS or Linux run reports one skip.**
 `test_restore_refuses_while_the_catalog_is_open` asserts that `restore`

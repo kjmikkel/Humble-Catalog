@@ -9,6 +9,7 @@ Node is optional. Without it these tests skip, so the suite still runs on
 a machine that only has Python.
 """
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -28,6 +29,23 @@ VIEWER_JS = [_STATIC / "app.js", _STATIC / "catalog.js",
              _STATIC / "shell.js"]
 
 
+def node_executable():
+    """The path to `node`; without one, skip -- or fail, where it is required.
+
+    A skip is right on a contributor's machine, where Node is optional.
+    In CI it would hide the loss of the whole JS suite behind a skip
+    count, so the workflow sets HUMBLE_REQUIRE_NODE and a missing Node
+    fails instead (#109). An empty value counts as unset.
+    """
+    node = shutil.which("node")
+    if node is not None:
+        return node
+    if os.environ.get("HUMBLE_REQUIRE_NODE"):
+        pytest.fail("node not found, and HUMBLE_REQUIRE_NODE is set: the "
+                    "JS behaviour tests must run here, not skip")
+    pytest.skip("node not installed; JS behaviour tests skipped")
+
+
 def eval_js(expression):
     """Evaluate `expression` with app.js loaded in a stubbed DOM.
 
@@ -36,9 +54,7 @@ def eval_js(expression):
     so a test can ask which renderers actually ran. The expression is
     awaited, so it may be async. Returns the JSON-decoded result.
     """
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("node not installed; JS behaviour tests skipped")
+    node = node_executable()
     # encoding is explicit: text=True alone decodes with the locale
     # codepage, which on Windows is cp1252, and Node writes UTF-8. That
     # silently mangled every non-ASCII character -- a euro sign came back

@@ -34,7 +34,20 @@ jobs:
       - name: Install
         run: python -m pip install -e ".[dev]"
 
+      # For the JS behaviour tests (tests/js_harness.py). They used to run
+      # only because the runner images happened to ship Node, at whatever
+      # version the image had; pinned here, the same major the suite is
+      # developed against (#109).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      # HUMBLE_REQUIRE_NODE turns "no Node, skip the JS suite" into a
+      # failure. Right on a contributor's machine, wrong here: a skip would
+      # hide the loss of every JS test behind a skip count.
       - name: Tests
+        env:
+          HUMBLE_REQUIRE_NODE: '1'
         run: python -m pytest -q
 
       # This one is a real gate on a runner: it reads path names, so it
