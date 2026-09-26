@@ -92,11 +92,31 @@ function renderBundlePreview() {
     panel.innerHTML = `<p class="bundle-error">${esc(bundlePreviewError)}</p>`;
     return;
   }
+  // A header row and bare numbers, so the three counts line up in labelled
+  // columns (#91). The bar's viewBox is the tier's item count, so its two
+  // rects ARE the counts: no percentage is computed and nothing is styled
+  // inline. Counts only -- never a price per item (#13).
+  const bar = (t) => t.total > 0 ? `<svg class="bundle-bar" role="img"
+      aria-label="${t.owned} owned, ${t.new} new, of ${t.total} ${
+        t.total === 1 ? "item" : "items"}"
+      viewBox="0 0 ${t.total} 1" preserveAspectRatio="none"
+      ><rect class="bundle-bar-rest" x="0" width="${t.total}" height="1"
+      /><rect class="bundle-bar-owned" x="0" width="${t.owned}" height="1"
+      /><rect class="bundle-bar-new" x="${t.owned}" width="${t.new}" height="1"
+      /></svg>` : "";
   const rows = bundlePreview.tiers.map((t) => `<tr>
     <td class="bundle-price">${esc(money(t.price, bundlePreview.currency))}</td>
-    <td>${t.total} ${t.total === 1 ? "item" : "items"}</td>
-    <td>owned <b>${t.owned}</b></td>
-    <td>new <b>${t.new}</b></td></tr>`).join("");
+    <td class="bundle-num">${t.total}</td>
+    <td class="bundle-num">${t.owned}</td>
+    <td class="bundle-num">${t.new}</td>
+    <td>${bar(t)}</td></tr>`).join("");
+  const head = `<thead><tr><th scope="col">Price</th><th scope="col">Items</th>
+    <th scope="col">Owned</th><th scope="col">New</th>
+    <th scope="col" class="bundle-key"><svg viewBox="0 0 1 1" aria-hidden="true"
+      ><rect class="bundle-bar-owned" width="1" height="1"/></svg> owned
+      <svg viewBox="0 0 1 1" aria-hidden="true"
+      ><rect class="bundle-bar-new" width="1" height="1"/></svg> new</th>
+    </tr></thead>`;
   // Every tier row first, then the lists. Interleaving them read fine in
   // the spec and badly in a browser: eight titles sat between the first
   // two prices and pushed the cheapest tier ~500px down, so the three
@@ -179,7 +199,7 @@ function renderBundlePreview() {
         .join("")}</ul></section>` : "";
   panel.innerHTML = `<details${bundlePreviewOpen ? " open" : ""}>
     <summary>${esc(bundlePreview.name)}</summary>
-    <table class="bundle-tiers"><tbody>${rows}</tbody></table>
+    <table class="bundle-tiers">${head}<tbody>${rows}</tbody></table>
     ${lists}${keyed}${series}${overlaps}</details>`;
   panel.querySelector("details").addEventListener("toggle",
     (ev) => { bundlePreviewOpen = ev.target.open; });

@@ -1209,8 +1209,10 @@ def test_render_bundle_preview_before_any_fetch_draws_nothing():
 
 
 def test_bundle_panel_says_item_not_items_for_a_single_item_tier():
+    # The cell is a bare number under an "Items" header now (#91); the
+    # words survive in the bar's spoken label.
     html = _render_bundle(_BUNDLE_REPORT)
-    assert "1 item<" in html
+    assert "of 1 item\"" in html
     assert "1 items" not in html
 
 
@@ -4159,3 +4161,66 @@ def test_load_draws_the_checklist_from_setup_state():
 def test_a_failed_setup_fetch_still_draws_the_empty_line():
     tbody = _load_fetches([], setup_fails=True)["tbody"]
     assert "No items in the catalog yet" in tbody and "<li" not in tbody
+
+
+# -- The tier table reads as a table (#91) -------------------------------
+# It had no header row and stretched across the page: price at the left
+# edge, "owned" ~400 px away, "new" ~600 px. Now compact, labelled, and
+# each tier carries a small owned/new bar. Counts only -- never a
+# price-per-item figure (#13).
+
+def _tier_table(report=None):
+    html = _render_bundle(report or _BUNDLE_REPORT)
+    start = html.index('<table class="bundle-tiers">')
+    return html[start:html.index("</table>", start)]
+
+
+def test_the_tier_table_has_a_header_row():
+    table = _tier_table()
+    head = table[table.index("<thead>"):table.index("</thead>")]
+    labels = re.findall(r"<th[^>]*>([^<]*)</th>", head)
+    assert labels[:4] == ["Price", "Items", "Owned", "New"]
+    assert 'scope="col"' in head
+
+
+def _tier_rows(table):
+    body = table[table.index("<tbody>"):]
+    return body.split("<tr>")[1:]
+
+
+def test_each_tier_row_holds_its_three_counts_as_bare_numbers():
+    first = _tier_rows(_tier_table())[0]
+    nums = re.findall(r'<td class="bundle-num">(\d+)</td>', first)
+    assert nums == ["6", "2", "4"]
+
+
+def test_each_tier_has_an_owned_and_new_bar():
+    # viewBox width is the tier's item count, so the rects ARE the counts:
+    # no percentage is computed and nothing is styled inline.
+    first = _tier_rows(_tier_table())[0]
+    assert 'viewBox="0 0 6 1"' in first
+    assert re.search(r'<rect class="bundle-bar-owned" x="0" width="2"', first)
+    assert re.search(r'<rect class="bundle-bar-new" x="2" width="4"', first)
+    assert 'role="img"' in first
+    assert 'aria-label="2 owned, 4 new, of 6 items"' in first
+    assert "style=" not in first
+
+
+def test_a_tier_with_no_items_draws_no_bar():
+    # A zero-width viewBox is invalid SVG.
+    report = dict(_BUNDLE_REPORT, tiers=[
+        {"price": 1.0, "total": 0, "owned": 0, "new": 0, "adds": []}])
+    table = _tier_table(report)
+    assert "<svg" not in table[table.index("<tbody>"):]
+
+
+def test_the_table_still_never_shows_a_price_per_item():
+    table = _tier_table().lower()
+    assert "per item" not in table and "/item" not in table
+
+
+def test_the_bar_has_a_key_in_its_header():
+    table = _tier_table()
+    head = table[table.index("<thead>"):table.index("</thead>")]
+    assert 'class="bundle-bar-owned"' in head and "owned" in head
+    assert 'class="bundle-bar-new"' in head and "new" in head
