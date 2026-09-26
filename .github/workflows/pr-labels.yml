@@ -1,0 +1,68 @@
+name: PR labels
+
+# Copies the labels of the issues a PR closes onto the PR itself (#111),
+# so a PR is filterable by bug/enhancement and area the moment it opens.
+# It only adds: a label set on the PR by hand is never removed.
+#
+# SECURITY -- read before changing anything here.
+# pull_request_target runs with a token that can write to this repo, and
+# it runs for PRs from forks too, which is the point: that is how outside
+# contributions arrive, and a plain pull_request token from a fork is
+# read-only, so it could not label them. That is safe ONLY because this
+# workflow never checks out, builds, installs or runs anything from the
+# PR. It sends the PR's number to GitHub's API and nothing else. Adding
+# actions/checkout, or any step that runs repository code, would hand a
+# write token to whoever opened the PR.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+  issues: read
+
+jobs:
+  copy-labels:
+    runs-on: ubuntu-latest
+    steps:
+      # Everything from the event reaches the shell through env, never an
+      # ${{ }} expression pasted into the script: a PR's text is chosen by
+      # whoever opened it.
+      - name: Copy the closed issues' labels onto the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          owner="${REPO%%/*}" name="${REPO#*/}"
+          # Issues in other repositories are skipped: their labels need not
+          # exist here, and a label that does not exist would be created.
+          mapfile -t labels < <(gh api graphql \
+            -F owner="$owner" -F name="$name" -F pr="$PR" \
+            -f query='query($owner: String!, $name: String!, $pr: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $pr) {
+                  closingIssuesReferences(first: 25) {
+                    nodes {
+                      repository { nameWithOwner }
+                      labels(first: 50) { nodes { name } }
+                    }
+                  }
+                }
+              }
+            }' \
+            --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[]
+                  | select(.repository.nameWithOwner == env.REPO)
+                  | .labels.nodes[].name' | sort -u)
+          if [ "${#labels[@]}" -eq 0 ]; then
+            echo "PR #$PR closes no labelled issue in $REPO; nothing to copy."
+            exit 0
+          fi
+          args=()
+          for label in "${labels[@]}"; do args+=(-f "labels[]=$label"); done
+          # The REST labels endpoint adds to what is there; it never
+          # replaces. It accepts a pull-requests: write token for a PR.
+          now=$(gh api --method POST "repos/$REPO/issues/$PR/labels" \
+            "${args[@]}" --jq '[.[].name] | join(", ")')
+          echo "PR #$PR now labelled: $now"
