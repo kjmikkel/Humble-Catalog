@@ -14,9 +14,13 @@ param([switch]$Detached)
 Require-Venv
 Set-Location $Root
 
+# A busy port is serve's to judge: it opens a viewer that is already
+# running, and refuses anything else. Asked in the foreground, so that
+# answer is seen even with -Detached.
 $listening = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
 if ($listening) {
-    Write-Error "Port $Port is already in use - run scripts\windows\stop.ps1 first."
+    & $Python -m humble_catalog serve --port $Port
+    exit $LASTEXITCODE
 }
 
 if ($Detached) {

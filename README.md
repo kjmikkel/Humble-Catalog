@@ -303,7 +303,8 @@ table is counts, source names and timestamps only.
 
 - `python -m humble_catalog serve` - open the catalog. Progress of a
   running extract/enrich shows in a banner; closing the browser never
-  interrupts them.
+  interrupts them. If the viewer is already running, `serve` opens it
+  in the browser and exits instead of starting a second one.
 
 The viewer's **Tasks** tab runs the catalog commands for you. **Update
 everything** at the top runs `update`, which is all a routine refresh

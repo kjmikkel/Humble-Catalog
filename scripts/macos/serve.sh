@@ -14,9 +14,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 require_venv
 cd "$ROOT"
 
+# A busy port is serve's to judge: it opens a viewer that is already
+# running, and refuses anything else. Asked in the foreground, so that
+# answer is seen even with --detached.
 if [ -n "$(find_listener_pids)" ]; then
-  echo "Port $PORT is already in use - run stop.sh first." >&2
-  exit 1
+  exec "$PYTHON" -m humble_catalog serve --port "$PORT"
 fi
 
 if [ "${1:-}" = "--detached" ]; then
