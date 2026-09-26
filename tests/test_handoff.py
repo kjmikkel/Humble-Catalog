@@ -148,3 +148,38 @@ def test_run_in_terminal_survives_a_failed_spawn(capsys):
 
     assert handoff.run_in_terminal("login", ["a"], _run=missing) is None
     assert "could not start" in capsys.readouterr().out.lower()
+
+
+# -- Is there a terminal to hand over to at all? (#98) -------------------
+# A viewer whose stdin is not a terminal (pythonw, nohup ... < /dev/null,
+# a service) has nowhere for login, reset or restore to run: reset and
+# restore would refuse, and the page would wait on a reconnect for
+# nothing. A hidden Windows console DOES pass isatty(), which is why the
+# detached wrappers also pass --no-handoff explicitly.
+
+class _Stdin:
+    def __init__(self, tty):
+        self._tty = tty
+
+    def isatty(self):
+        return self._tty
+
+
+def test_a_terminal_stdin_can_take_a_handoff():
+    assert handoff.terminal_available(_Stdin(True)) is True
+
+
+def test_a_redirected_stdin_cannot():
+    assert handoff.terminal_available(_Stdin(False)) is False
+
+
+def test_no_stdin_at_all_cannot():
+    # pythonw, and a process started with its standard handles closed.
+    assert handoff.terminal_available(None) is False
+
+
+def test_a_closed_stdin_cannot():
+    class Closed:
+        def isatty(self):
+            raise ValueError("I/O operation on closed file")
+    assert handoff.terminal_available(Closed()) is False

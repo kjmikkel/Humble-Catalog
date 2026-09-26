@@ -180,6 +180,7 @@ const publish = `
   previewBundle, renderBundlePreview, money,
   setBundlePreview: (v) => { bundlePreview = v; },
   TASK_CARDS, TASK_GROUPS, TAKEOVER_TEXT, renderTasks, startTask, taskMessage,
+  setHandoffAvailable: (v) => { handoffAvailable = v; },
   previewChoice, renderChoicePreview,
   setChoicePreview: (v) => { choicePreview = v; },
   setGenresShowAll: (v) => { genresShowAll = v; },

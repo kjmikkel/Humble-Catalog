@@ -26,6 +26,28 @@ COMMANDS = {
 }
 
 
+_STDIN = object()
+
+
+def terminal_available(stdin=_STDIN):
+    """Whether this process has an interactive console to hand over to.
+
+    A viewer with no stdin (pythonw), or one reading from a file or
+    /dev/null (nohup, a service), has nowhere for reset or restore to ask
+    for their typed word, so it must not offer the handoff at all. A
+    hidden Windows console passes this check; the detached wrappers say
+    so with `serve --no-handoff` instead.
+    """
+    if stdin is _STDIN:
+        stdin = sys.stdin
+    if stdin is None:
+        return False
+    try:
+        return bool(stdin.isatty())
+    except ValueError:        # a closed stream
+        return False
+
+
 def list_backups(backups_dir="backups"):
     """The snapshots `backup` wrote, newest first.
 

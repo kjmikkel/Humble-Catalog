@@ -820,11 +820,9 @@ def _register_write_routes(app):
         if data is None:
             return jsonify({"error": "a JSON object is required"}), 400
         slot = _slot()
-        if slot is None:
-            return jsonify({"error": "this viewer was not started with "
-                            "`python -m humble_catalog serve`, so it has no "
-                            "terminal to hand over to"}), 409
         command = _text_field(data, "command")
+        if slot is None:
+            return jsonify({"error": _no_terminal_message(command)}), 409
         options = data.get("options") or {}
         if not command:
             return jsonify({"error": "command required"}), 400
@@ -1143,8 +1141,32 @@ LAN_HINT = ("choose another port with --lan-port (or --port for the viewer "
             "itself)")
 
 
-def serve(db_path="catalog.db", port=8087, lan=None):
-    slot = handoff.HandoffSlot()
+def _no_terminal_message(command):
+    """Why a viewer with no terminal refuses a handoff, and what to do."""
+    reason = ("this viewer has no terminal to hand over to (it was "
+              "started detached, with --no-handoff, or not by `serve`)")
+    if command not in handoff.COMMANDS:
+        return reason
+    line = f"python -m humble_catalog {command}"
+    if command == "restore":
+        line += " backups/<snapshot>"
+    return f"{reason}; run `{line}` in a terminal instead"
+
+
+def _handoff_slot(terminal_commands):
+    """The slot login, reset and restore are handed over through, or None
+    when there is no terminal for them to run in (#98)."""
+    if terminal_commands and handoff.terminal_available():
+        return handoff.HandoffSlot()
+    print("login, reset and restore are off in this viewer: it has no "
+          "terminal to hand them to. Run them with "
+          "`python -m humble_catalog <command>` in a terminal.")
+    return None
+
+
+def serve(db_path="catalog.db", port=8087, lan=None, terminal_commands=True):
+    # Not named `handoff`: that would shadow the module this file uses.
+    slot = _handoff_slot(terminal_commands)
     viewer_url = f"http://127.0.0.1:{port}/"
     if lan is None:
         app = create_app(db_path=db_path)

@@ -2729,6 +2729,8 @@ def _stub_servers(monkeypatch):
     monkeypatch.setattr(webmod, "_run_all", lambda servers, slot=None: None)
     monkeypatch.setattr(webmod.webbrowser, "open", lambda url: None)
     monkeypatch.setattr(lanmod, "lan_address", lambda: "192.168.1.20")
+    # pytest's stdin is not a terminal; serve from one is the usual case.
+    monkeypatch.setattr(webmod.handoff, "terminal_available", lambda: True)
     return built
 
 
@@ -3063,7 +3065,7 @@ def test_handoff_without_a_serve_loop_says_how_to_get_one(tmp_path):
     client, _r, _s, _b = _handoff_client(tmp_path, slot=False)
     resp = client.post("/api/jobs/handoff", json={"command": "login"})
     assert resp.status_code == 409
-    assert "humble_catalog serve" in resp.get_json()["error"]
+    assert "python -m humble_catalog login" in resp.get_json()["error"]
 
 
 def test_handoff_waits_for_a_running_job(tmp_path):
@@ -3147,3 +3149,62 @@ def test_the_sort_indicator_stays_inside_the_header_button():
     assert all(c.index('<span class="sort-ind">') > c.index("<button")
                and c.index('<span class="sort-ind">') < c.index("</button>")
                for c in cells), cells
+
+
+# -- A viewer with no terminal offers no handoff (#98) -------------------
+# serve used to create the handoff slot unconditionally. Started detached
+# (serve.ps1 -Detached: a hidden console), a reset handed over waited for
+# RESET typed into a window nobody could see, with the viewer stepped down
+# behind it and the page reconnecting for ever. Reproduced on a throwaway
+# catalog before this fix.
+
+def _served_app(tmp_path, monkeypatch, lan=None, terminal=True, **kw):
+    built = _stub_servers(monkeypatch)
+    monkeypatch.setattr(webmod.handoff, "terminal_available",
+                        lambda: terminal)
+    dbp = tmp_path / "catalog.db"
+    _seed(dbp)
+    webmod.serve(db_path=str(dbp), port=8087, lan=lan, **kw)
+    return built[0].app
+
+
+def test_serve_with_a_terminal_offers_the_handoff(tmp_path, monkeypatch):
+    app = _served_app(tmp_path, monkeypatch)
+    assert app.config["HANDOFF"] is not None
+
+
+def test_serve_no_handoff_offers_none(tmp_path, monkeypatch):
+    # The detached wrappers pass this: a hidden console passes isatty(),
+    # so it cannot be detected and has to be said.
+    app = _served_app(tmp_path, monkeypatch, terminal_commands=False)
+    assert app.config["HANDOFF"] is None
+
+
+def test_serve_without_a_terminal_offers_none(tmp_path, monkeypatch):
+    app = _served_app(tmp_path, monkeypatch, terminal=False)
+    assert app.config["HANDOFF"] is None
+
+
+def test_serve_lan_with_no_handoff_offers_none(tmp_path, monkeypatch):
+    app = _served_app(tmp_path, monkeypatch, lan=lanmod.LanOptions(),
+                      terminal_commands=False)
+    assert app.config["HANDOFF"] is None
+
+
+def test_serve_says_when_the_terminal_commands_are_off(tmp_path, monkeypatch,
+                                                       capsys):
+    _served_app(tmp_path, monkeypatch, terminal_commands=False)
+    out = capsys.readouterr().out
+    assert "login, reset and restore" in out
+
+
+def test_a_refused_handoff_says_where_to_run_the_command(tmp_path):
+    # The old refusal blamed how the viewer was started, which is no
+    # longer the only reason, and gave no way forward.
+    dbp = tmp_path / "catalog.db"
+    _seed(dbp)
+    client = webmod.create_app(db_path=str(dbp)).test_client()  # no slot
+    resp = client.post("/api/jobs/handoff", json={"command": "reset"})
+    assert resp.status_code == 409
+    error = resp.get_json()["error"]
+    assert "python -m humble_catalog reset" in error

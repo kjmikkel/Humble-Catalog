@@ -60,7 +60,10 @@ nothing).
 
 **`serve` runs in the foreground by default** — Ctrl+C stops it. Pass
 `-Detached` / `--detached` to background it, then use `stop` to shut it
-down. Starting a second one is refused while the port is busy.
+down. Starting a second one is refused while the port is busy. A
+detached viewer has no terminal to hand `login`, `reset` or `restore`
+to, so it starts with `--no-handoff` and the Tasks tab shows the
+command to run for those three instead.
 
 **`stop` targets the port, not a stored PID**, so it also catches a
 server started some other way — an editor task runner, or one left over

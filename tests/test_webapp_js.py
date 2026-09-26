@@ -3970,3 +3970,69 @@ def test_the_first_poll_does_not_reload_for_a_job_that_ended_earlier():
     # A job that finished before this page loaded is already in what the
     # page's own load() fetched; reloading for it again is pure waste.
     assert "/api/items" not in _last_poll_fetches(_finished("enrich"))
+
+
+# -- A viewer with no terminal says so, instead of arming a dead card (#98)
+# The three "uses the terminal" cards used to arm and fire whatever the
+# server could do; a detached viewer accepted the request and never came
+# back. Now /api/jobs says whether a handoff is possible, and the page
+# shows the command to run instead.
+
+_TERMINAL = ("login", "reset", "restore")
+
+
+def _task_html(available):
+    return eval_js("""(app.setHandoffAvailable(%s), app.renderTasks(),
+                       dom.writes['#task-cards'])""" % json.dumps(available))
+
+
+def _card(html, command):
+    """The markup of the card whose Run button runs `command`."""
+    cards = html.split('<div class="task-card')
+    return next(c for c in cards if f'data-command="{command}"' in c)
+
+
+@pytest.mark.parametrize("command", _TERMINAL)
+def test_without_a_terminal_each_terminal_card_is_disabled(command):
+    card = _card(_task_html(False), command)
+    assert re.search(r"<button[^>]*\bdisabled\b", card)
+    assert f"python -m humble_catalog {command}" in card
+
+
+@pytest.mark.parametrize("command", _TERMINAL)
+def test_with_a_terminal_the_cards_stay_live(command):
+    card = _card(_task_html(True), command)
+    assert not re.search(r"<button[^>]*\bdisabled\b", card)
+    assert "no terminal" not in card
+
+
+def test_other_cards_are_unaffected_without_a_terminal():
+    card = _card(_task_html(False), "harvest")
+    assert not re.search(r"<button[^>]*\bdisabled\b", card)
+
+
+def test_a_poll_reporting_no_terminal_redraws_the_cards():
+    html = eval_js("""(async () => {
+      app.setHandoffAvailable(true);
+      app.renderTasks();
+      app.setFetch((url) => Promise.resolve({json: () => Promise.resolve(
+        url === "/api/backups" ? {backups: []}
+        : {running: null, progress: [], log: [], last: null,
+           handoff: {available: false, generation: 0, pending: null,
+                     last: null}})}));
+      await pollJobs();
+      return dom.writes['#task-cards'];
+    })()""")
+    assert "python -m humble_catalog reset" in _card(html, "reset")
+
+
+def test_an_expired_session_without_a_terminal_names_the_command():
+    html = eval_js("""renderJobPanel({
+      running: null, progress: [],
+      handoff: {available: false, generation: 0, pending: null, last: null},
+      log: ["HumbleBundle session expired -- run "
+            + "'python -m humble_catalog login', then try again."],
+      last: {command: "extract", state: "failed", exit_code: 1,
+             finished_at: "2026-09-26T00:01:00+00:00"}})""")
+    assert 'data-handoff="1"' not in html
+    assert "python -m humble_catalog login" in html

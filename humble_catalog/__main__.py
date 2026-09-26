@@ -193,6 +193,10 @@ def main():
     p_serve.add_argument("--new-token", action="store_true",
                          help="With --lan: replace the pairing token, "
                               "unpairing every device")
+    p_serve.add_argument("--no-handoff", action="store_true",
+                         help="Do not hand login, reset or restore to this "
+                              "terminal (for a viewer started detached, "
+                              "whose console nobody can see)")
     p_export = sub.add_parser("export", help="Write the whole catalog to a "
                                              "CSV or XLSX file "
                                              "(Excel/Sheets-ready)")
@@ -358,13 +362,15 @@ def main():
         if needs_lan and not args.lan:
             parser.error(f"{', '.join(needs_lan)} needs --lan")
         if not args.lan:
-            webapp.serve(port=args.port)
+            webapp.serve(port=args.port,
+                         terminal_commands=not args.no_handoff)
         else:
             from humble_catalog.lan import LanOptions, LanStateError
             try:
                 webapp.serve(port=args.port, lan=LanOptions(
                     host=args.lan_host, port=args.lan_port,
-                    setup=args.setup, new_token=args.new_token))
+                    setup=args.setup, new_token=args.new_token),
+                    terminal_commands=not args.no_handoff)
             except LanStateError as exc:
                 sys.exit(f"serve --lan: {exc}")
     elif args.command == "export":
