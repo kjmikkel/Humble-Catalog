@@ -4258,3 +4258,145 @@ def test_an_older_server_without_a_word_still_shows_the_score():
     # _BUNDLE_REPORT carries no strength, as a payload from before #93.
     line = _overlap_line(_render_bundle(_BUNDLE_REPORT), "Shadow Hound Vol. 1-6 ~")
     assert "0.92" in line
+
+
+# -- Recently checked bundles (#94) --------------------------------------
+# Comparing several live bundles meant re-pasting each URL. The last few
+# successful checks are kept locally, as one-click re-checks. Bundle URLs
+# are public, and storage keeps them out of the address bar and history
+# (the reason the preview is a POST). Never stored on the LAN viewer, and
+# a blocked store degrades to no list rather than an error.
+
+def _recent(body, stored=None, read_only=False):
+    return eval_js("""(async () => {
+      dom.reset();
+      localStorage.removeItem(app.RECENT_BUNDLES_KEY);
+      if (%s !== null) localStorage.setItem(app.RECENT_BUNDLES_KEY, %s);
+      app.setReadOnly(%s);
+      try { return await (%s); } finally { app.setReadOnly(false); }
+    })()""" % (json.dumps(stored), json.dumps(stored), json.dumps(read_only),
+               body))
+
+
+def _check(url, report):
+    return """(async () => {
+      app.setFetch(() => Promise.resolve(
+        {ok: true, json: () => Promise.resolve(%s)}));
+      await app.previewBundle(%s);
+    })()""" % (json.dumps(report), json.dumps(url))
+
+
+_URL_A = "https://www.humblebundle.com/books/the-world-of-examplia-books"
+_URL_B = "https://www.humblebundle.com/books/lantern-and-lockpick-books"
+
+
+def test_a_successful_check_is_remembered_with_its_name():
+    got = _recent("""(async () => {
+      await %s;
+      return app.loadRecentBundles();
+    })()""" % _check(_URL_A, _BUNDLE_REPORT))
+    assert [(r["url"], r["name"]) for r in got] == [
+        (_URL_A, "Humble Book Bundle: The World of Examplia")]
+    assert got[0]["checked"]
+
+
+def test_a_failed_check_is_not_remembered():
+    got = _recent("""(async () => {
+      app.setFetch(() => Promise.resolve({ok: false, status: 400,
+        json: () => Promise.resolve({error: "not a bundle page"})}));
+      await app.previewBundle(%s);
+      return app.loadRecentBundles();
+    })()""" % json.dumps(_URL_A))
+    assert got == []
+
+
+def test_rechecking_moves_a_bundle_to_the_top_without_a_duplicate():
+    got = _recent("""(async () => {
+      app.rememberBundle(%s, "A");
+      app.rememberBundle(%s, "B");
+      app.rememberBundle(%s, "A again");
+      return app.loadRecentBundles();
+    })()""" % (json.dumps(_URL_A), json.dumps(_URL_B), json.dumps(_URL_A)))
+    assert [r["url"] for r in got] == [_URL_A, _URL_B]
+    assert got[0]["name"] == "A again"
+
+
+def test_only_the_last_five_are_kept():
+    got = _recent("""(async () => {
+      for (let i = 0; i < 7; i++)
+        app.rememberBundle("https://www.humblebundle.com/books/b" + i, "B" + i);
+      return app.loadRecentBundles();
+    })()""")
+    assert [r["name"] for r in got] == ["B6", "B5", "B4", "B3", "B2"]
+
+
+def test_the_list_offers_a_recheck_per_bundle_and_a_clear_button():
+    html = _recent("""(async () => {
+      app.rememberBundle(%s, "Humble Book Bundle: The World of Examplia");
+      app.renderRecentBundles();
+      return dom.writes["#bundle-recent"];
+    })()""" % json.dumps(_URL_A))
+    assert f'data-recent-url="{_URL_A}"' in html
+    assert "Humble Book Bundle: The World of Examplia" in html
+    assert 'id="bundle-recent-clear"' in html
+
+
+def test_names_and_urls_are_escaped():
+    html = _recent("""(async () => {
+      app.rememberBundle("https://www.humblebundle.com/books/x?a=1&b=\\"2",
+                         "<b>Bold</b> Bundle");
+      app.renderRecentBundles();
+      return dom.writes["#bundle-recent"];
+    })()""")
+    assert "<b>Bold</b>" not in html and "&lt;b&gt;" in html
+    assert '&quot;2' in html
+
+
+def test_clear_forgets_every_bundle():
+    got = _recent("""(async () => {
+      app.rememberBundle(%s, "A");
+      app.clearRecentBundles();
+      return [app.loadRecentBundles(), localStorage.getItem(app.RECENT_BUNDLES_KEY)];
+    })()""" % json.dumps(_URL_A))
+    assert got == [[], None]
+
+
+def test_the_lan_viewer_stores_nothing():
+    got = _recent("""(async () => {
+      app.rememberBundle(%s, "A");
+      return localStorage.getItem(app.RECENT_BUNDLES_KEY);
+    })()""" % json.dumps(_URL_A), read_only=True)
+    assert got is None
+
+
+def test_malformed_storage_is_ignored_entry_by_entry():
+    stored = json.dumps([
+        {"url": _URL_A, "name": "Kept", "checked": "2026-09-26T10:00:00Z"},
+        {"url": 5, "name": "bad url"},
+        "not an object",
+        {"url": "javascript:alert(1)", "name": "Not http",
+         "checked": "2026-09-26T10:00:00Z"},
+    ])
+    got = _recent("(async () => app.loadRecentBundles())()", stored=stored)
+    assert [r["name"] for r in got] == ["Kept"]
+    assert _recent("(async () => app.loadRecentBundles())()",
+                   stored="{not json") == []
+
+
+def test_a_blocked_store_degrades_to_no_list():
+    # Private windows and blocked site data throw on access.
+    got = eval_js("""(async () => {
+      const real = globalThis.localStorage;
+      globalThis.localStorage = {
+        getItem() { throw new Error("blocked"); },
+        setItem() { throw new Error("blocked"); },
+        removeItem() { throw new Error("blocked"); },
+      };
+      try {
+        app.rememberBundle(%s, "A");
+        app.clearRecentBundles();
+        app.renderRecentBundles();
+        return app.loadRecentBundles();
+      } finally { globalThis.localStorage = real; }
+    })()""" % json.dumps(_URL_A))
+    assert got == []

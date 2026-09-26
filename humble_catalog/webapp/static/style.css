@@ -490,6 +490,11 @@ a { color: var(--accent); }
 #bundle-form { flex: 0 1 36rem; }
 .bundle-url-row { display: flex; gap: .5rem; }
 #bundle-url { flex: 1 1 auto; min-width: 0; }
+/* The last few checks under the URL box (#94). */
+#bundle-recent { margin-top: .5rem; font-size: .9em; }
+#bundle-recent ul { list-style: none; margin: .2rem 0; padding: 0; }
+#bundle-recent li { margin: .15rem 0; }
+.bundle-recent-label { color: var(--muted); }
 #bundle-panel { margin-bottom: .75rem; }
 /* Compact, not page-wide: stretched, the three counts sat ~600 px apart
    (#91). Numbers right-aligned in tabular figures so they line up. */

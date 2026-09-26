@@ -75,7 +75,80 @@ async function previewBundle(url) {
     bundlePreview = report || null;
     bundlePreviewError = error || null;
     renderBundlePreview();
+    // Only a check that worked is worth one click to repeat.
+    if (report) {
+      rememberBundle(url, report.name);
+      renderRecentBundles();
+    }
   });
+}
+
+// ---- Recently checked bundles (#94) -----------------------------------
+// Comparing several live bundles meant re-pasting each URL. The last few
+// successful checks are kept as one-click re-checks. Bundle URLs and names
+// are public, and localStorage keeps them out of the address bar and the
+// browser history -- the reason the preview is a POST.
+//
+// Not on the LAN viewer, for #44's reason: storage on a paired phone is
+// not local to the machine that holds the library. Every access is
+// guarded, because a private window or blocked site data throws, and the
+// answer to that is no list, never an error.
+const RECENT_BUNDLES_KEY = "hc-recent-bundles";
+const RECENT_BUNDLES_MAX = 5;
+
+function loadRecentBundles() {
+  if (READ_ONLY) return [];
+  let raw;
+  try {
+    raw = JSON.parse(localStorage.getItem(RECENT_BUNDLES_KEY));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+  // Kept entry by entry: whatever else is stored, only an http(s) URL is
+  // ever put into a button that re-checks it.
+  return raw.filter((r) => r && typeof r === "object"
+    && typeof r.url === "string" && /^https?:\/\//i.test(r.url)
+    && typeof r.name === "string" && typeof r.checked === "string")
+    .slice(0, RECENT_BUNDLES_MAX);
+}
+
+function saveRecentBundles(list) {
+  try {
+    if (list.length) localStorage.setItem(RECENT_BUNDLES_KEY, JSON.stringify(list));
+    else localStorage.removeItem(RECENT_BUNDLES_KEY);
+  } catch {
+    // Blocked storage: the list simply is not kept.
+  }
+}
+
+function rememberBundle(url, name, now = new Date()) {
+  if (READ_ONLY) return;
+  const entry = {url, name: name || url, checked: now.toISOString()};
+  saveRecentBundles([entry, ...loadRecentBundles().filter((r) => r.url !== url)]
+    .slice(0, RECENT_BUNDLES_MAX));
+}
+
+function clearRecentBundles() {
+  if (READ_ONLY) return;
+  saveRecentBundles([]);
+}
+
+function renderRecentBundles() {
+  const el = $("#bundle-recent");
+  if (!el) return;
+  const list = loadRecentBundles();
+  el.hidden = list.length === 0;
+  const when = (iso) => {
+    const d = new Date(iso);
+    return isNaN(d) ? "" : d.toLocaleString(undefined,
+      {dateStyle: "medium", timeStyle: "short"});
+  };
+  el.innerHTML = list.length ? `<span class="bundle-recent-label">Recent:</span>
+    <ul>${list.map((r) => `<li><button class="bundle-recent-go"
+      data-recent-url="${esc(r.url)}" title="${esc(r.url)}">${esc(r.name)}</button>
+      <span class="bundle-score">checked ${esc(when(r.checked))}</span></li>`).join("")}</ul>
+    <button id="bundle-recent-clear" aria-label="Clear recent bundles">Clear</button>` : "";
 }
 
 // How sure a fuzzy title match is, as a word (#93). "(0.91)" named no
@@ -223,6 +296,20 @@ $("#bundle-go").addEventListener("click", () => {
 $("#bundle-url").addEventListener("keydown", (ev) => {
   if (ev.key === "Enter") $("#bundle-go").click();
 });
+$("#bundle-recent").addEventListener("click", (ev) => {
+  const t = ev.target;
+  if (t.id === "bundle-recent-clear") {
+    clearRecentBundles();
+    renderRecentBundles();
+    return;
+  }
+  const url = t.closest && t.closest(".bundle-recent-go")?.dataset.recentUrl;
+  if (url) {
+    $("#bundle-url").value = url;
+    previewBundle(url);
+  }
+});
+renderRecentBundles();
 
 // ---- Humble Choice panel ----------------------------------------------
 // One button, no URL: Choice is always "this month". The counting lives
