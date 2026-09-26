@@ -59,11 +59,14 @@ def built(tmp_path_factory):
                  if line.startswith(("WHEEL=", "SDIST=")))
     with zipfile.ZipFile(out / names["WHEEL"]) as whl:
         wheel = set(whl.namelist())
+        entry_points = next(
+            (whl.read(n).decode("utf-8") for n in wheel
+             if n.endswith(".dist-info/entry_points.txt")), "")
     with tarfile.open(out / names["SDIST"]) as tar:
         # An sdist nests everything under "<name>-<version>/".
         sdist = {m.name.split("/", 1)[1] for m in tar.getmembers()
                  if "/" in m.name}
-    return wheel, sdist
+    return wheel, sdist, entry_points
 
 
 def test_there_are_static_files_to_check():
@@ -73,12 +76,27 @@ def test_there_are_static_files_to_check():
 
 
 def test_the_wheel_ships_every_static_file(built):
-    wheel, _sdist = built
+    wheel, _sdist, _entry_points = built
     assert [f for f in _static_files() if f not in wheel] == []
 
 
 def test_the_sdist_ships_every_static_file(built):
     # A wheel built from the sdist -- which is what pip does with one --
     # can only contain what the sdist carried.
-    _wheel, sdist = built
+    _wheel, sdist, _entry_points = built
     assert [f for f in _static_files() if f not in sdist] == []
+
+
+# -- The `humble-catalog` command (#96) ---------------------------------
+# Without it an installed catalog is `python -m humble_catalog ...` from
+# an activated venv, which is the step a newcomer does not know to take.
+
+def test_the_wheel_installs_a_humble_catalog_command(built):
+    _wheel, _sdist, entry_points = built
+    assert "[console_scripts]" in entry_points
+    assert "humble-catalog = humble_catalog.__main__:main" in entry_points
+
+
+def test_the_command_points_at_a_real_function():
+    import humble_catalog.__main__ as cli
+    assert callable(cli.main)

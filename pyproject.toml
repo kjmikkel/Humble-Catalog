@@ -17,6 +17,12 @@ classifiers = [
 ]
 dependencies = ["requests>=2.31", "flask>=3.0", "playwright>=1.40", "rapidfuzz>=3.5", "openpyxl>=3.1", "cryptography>=42", "qrcode>=7.4"]
 
+# `humble-catalog serve`, `humble-catalog update` and the rest, from any
+# shell with the venv on PATH (#96). The same entry point as
+# `python -m humble_catalog`.
+[project.scripts]
+humble-catalog = "humble_catalog.__main__:main"
+
 [project.optional-dependencies]
 # setuptools: tests/test_packaging.py builds the wheel and sdist with it,
 # offline, so it needs the same floor as [build-system] below.

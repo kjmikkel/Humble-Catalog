@@ -9,3 +9,8 @@
 # so they need the LF rule spelled out separately or the rule above misses
 # them and a CRLF checkout breaks the shebang on macOS and Linux.
 scripts/hooks/* text eol=lf
+
+# The double-click launchers (#96). A .command is a shell script, so the
+# shebang rule applies; cmd.exe misreads labels in an LF-only .cmd.
+*.command text eol=lf
+*.cmd text eol=crlf

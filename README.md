@@ -72,6 +72,19 @@ humble_catalog enrich` (`.venv/bin/python` elsewhere), or use the per-OS
 wrappers in `scripts/`, which locate the environment themselves — see
 [scripts/README.md](scripts/README.md).
 
+**To open the viewer without a terminal**, double-click
+`Humble Catalog.cmd` (Windows) or `Humble Catalog.command` (macOS) at the
+top of the checkout. Each finds `.venv` itself and runs `serve`, or opens
+the viewer if it is already running. Leave its window open while you use
+the catalog: Log in, Reset and Restore in the Tasks tab run in it, and
+closing it stops the viewer. The first time, macOS may ask you to allow
+it under System Settings → Privacy & Security.
+
+The install also puts a `humble-catalog` command in the environment, so
+with it active `humble-catalog serve` is the same as
+`python -m humble_catalog serve`. Already-created environments get it
+from a re-run of the `pip install` line above.
+
 ### Optional API keys (better enrichment)
 
 - `HARDCOVER_API_KEY` - free from hardcover.app (Settings -> Hardcover API).
@@ -133,7 +146,8 @@ stores normally.
 
 ## Usage
 
-Everything below is a subcommand of `python -m humble_catalog`. The
+Everything below is a subcommand of `python -m humble_catalog` (or of
+`humble-catalog`, the same thing). The
 sections run in the order you would use them: build the catalog, enrich
 it, then read it.
 
