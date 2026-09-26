@@ -2,6 +2,7 @@ import base64
 import binascii
 import datetime as dt
 import hmac
+import http.client
 import io
 import json
 import re
@@ -1141,6 +1142,28 @@ LAN_HINT = ("choose another port with --lan-port (or --port for the viewer "
             "itself)")
 
 
+def viewer_running(port, timeout=1.0):
+    """Whether this catalog's viewer already answers on 127.0.0.1:`port`.
+
+    A second `serve` usually means "show me the catalog" (#97). Only an
+    answer shaped like /api/status counts, so a port held by anything
+    else still gets the usual "cannot listen" error. http.client, not
+    requests: it ignores proxy settings, and this must reach loopback.
+    """
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+    try:
+        conn.request("GET", "/api/status")
+        resp = conn.getresponse()
+        if resp.status != 200:
+            return False
+        body = json.loads(resp.read())
+    except (OSError, http.client.HTTPException, ValueError):
+        return False
+    finally:
+        conn.close()
+    return isinstance(body, dict) and {"runs", "read_only"} <= body.keys()
+
+
 def _no_terminal_message(command):
     """Why a viewer with no terminal refuses a handoff, and what to do."""
     reason = ("this viewer has no terminal to hand over to (it was "
@@ -1165,9 +1188,15 @@ def _handoff_slot(terminal_commands):
 
 
 def serve(db_path="catalog.db", port=8087, lan=None, terminal_commands=True):
+    viewer_url = f"http://127.0.0.1:{port}/"
+    if lan is None and viewer_running(port):
+        # Before the handoff slot, whose notice would describe a viewer
+        # this command never starts.
+        print(f"Viewer already running at {viewer_url} -- opening it.")
+        webbrowser.open(viewer_url)
+        return
     # Not named `handoff`: that would shadow the module this file uses.
     slot = _handoff_slot(terminal_commands)
-    viewer_url = f"http://127.0.0.1:{port}/"
     if lan is None:
         app = create_app(db_path=db_path)
         app.config["HANDOFF"] = slot

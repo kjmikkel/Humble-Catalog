@@ -60,7 +60,8 @@ nothing).
 
 **`serve` runs in the foreground by default** — Ctrl+C stops it. Pass
 `-Detached` / `--detached` to background it, then use `stop` to shut it
-down. Starting a second one is refused while the port is busy. A
+down. Running `serve` again while a viewer is up opens that one in the
+browser instead; anything else holding the port is still refused. A
 detached viewer has no terminal to hand `login`, `reset` or `restore`
 to, so it starts with `--no-handoff` and the Tasks tab shows the
 command to run for those three instead.

@@ -2731,6 +2731,9 @@ def _stub_servers(monkeypatch):
     monkeypatch.setattr(lanmod, "lan_address", lambda: "192.168.1.20")
     # pytest's stdin is not a terminal; serve from one is the usual case.
     monkeypatch.setattr(webmod.handoff, "terminal_available", lambda: True)
+    # Never probe the real port: a viewer running on this machine would
+    # turn every serve test into "already running".
+    monkeypatch.setattr(webmod, "viewer_running", lambda port: False)
     return built
 
 
@@ -3208,3 +3211,106 @@ def test_a_refused_handoff_says_where_to_run_the_command(tmp_path):
     assert resp.status_code == 409
     error = resp.get_json()["error"]
     assert "python -m humble_catalog reset" in error
+
+
+# -- serve reuses a viewer that is already running (#97) -----------------
+# The usual intent of a second `serve` is "show me the catalog", which
+# used to fail with "cannot listen". The probe runs against a real
+# listener: what matters is what answers on the port, which a mock of the
+# probe itself cannot show.
+import threading                                        # noqa: E402
+from http.server import BaseHTTPRequestHandler, HTTPServer  # noqa: E402
+
+
+def _listener(body, status=200):
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.server.seen.append(self.path)
+            payload = body.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), Handler)
+    srv.seen = []
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+@pytest.fixture
+def listener():
+    started = []
+
+    def start(body, status=200):
+        srv = _listener(body, status)
+        started.append(srv)
+        return srv
+    yield start
+    for srv in started:
+        srv.shutdown()
+        srv.server_close()
+
+
+_VIEWER_STATUS = json.dumps({"runs": [], "read_only": False})
+
+
+def test_a_viewer_answering_on_the_port_is_recognised(listener):
+    srv = listener(_VIEWER_STATUS)
+    assert webmod.viewer_running(srv.server_port) is True
+    assert srv.seen == ["/api/status"]
+
+
+@pytest.mark.parametrize("body,status", [
+    ("<html>someone else's app</html>", 200),
+    (json.dumps({"hello": "world"}), 200),
+    (json.dumps(["runs", "read_only"]), 200),
+    (_VIEWER_STATUS, 500),
+])
+def test_anything_else_on_the_port_is_not_a_viewer(listener, body, status):
+    srv = listener(body, status)
+    assert webmod.viewer_running(srv.server_port) is False
+
+
+def test_nothing_listening_is_not_a_viewer():
+    import socket
+    with socket.socket() as sock:      # a port that was free a moment ago
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    assert webmod.viewer_running(port) is False
+
+
+def test_serve_opens_the_running_viewer_instead_of_binding(
+        tmp_path, monkeypatch, capsys, listener):
+    srv = listener(_VIEWER_STATUS)
+    port = srv.server_port
+    opened = []
+    monkeypatch.setattr(webmod.webbrowser, "open", opened.append)
+
+    def no_bind(*a, **kw):
+        raise AssertionError("serve bound a port a viewer already holds")
+    monkeypatch.setattr(webmod, "make_server", no_bind)
+    dbp = tmp_path / "catalog.db"
+    _seed(dbp)
+    webmod.serve(db_path=str(dbp), port=port)       # returns: exit code 0
+    url = f"http://127.0.0.1:{port}/"
+    assert opened == [url]
+    assert f"already running at {url}" in capsys.readouterr().out
+
+
+def test_serve_still_refuses_a_port_something_else_holds(
+        tmp_path, monkeypatch, listener):
+    srv = listener("<html>someone else's app</html>")
+    monkeypatch.setattr(webmod.webbrowser, "open", lambda url: None)
+
+    def busy(host, port, app, **kw):
+        raise OSError("address in use")
+    monkeypatch.setattr(webmod, "make_server", busy)
+    dbp = tmp_path / "catalog.db"
+    _seed(dbp)
+    with pytest.raises(SystemExit, match="cannot listen"):
+        webmod.serve(db_path=str(dbp), port=srv.server_port)
