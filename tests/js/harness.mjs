@@ -181,6 +181,7 @@ const publish = `
   setBundlePreview: (v) => { bundlePreview = v; },
   TASK_CARDS, TASK_GROUPS, TAKEOVER_TEXT, renderTasks, startTask, taskMessage,
   setHandoffAvailable: (v) => { handoffAvailable = v; },
+  setSetupState: (v) => { setupState = v; },
   previewChoice, renderChoicePreview,
   setChoicePreview: (v) => { choicePreview = v; },
   setGenresShowAll: (v) => { genresShowAll = v; },

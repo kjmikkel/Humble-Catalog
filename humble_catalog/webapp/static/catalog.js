@@ -787,8 +787,36 @@ function emptyStateText() {
   if (items.length === 0)
     return READ_ONLY
       ? "No items in the catalog yet."
-      : "No items in the catalog yet — run Fetch new bundles in Tasks.";
+      : "No items in the catalog yet — run Update everything in Tasks.";
   return "No items match these filters.";
+}
+
+// The empty Library on a first run (#99): the order that works, since a
+// fetch with no saved login fails, with what /api/setup says is done
+// ticked. Only on the local viewer, and only once setup state is known.
+function firstRunChecklist(s) {
+  const step = (done, html) =>
+    `<li${done ? ' data-done="1"' : ""}>${done
+      ? '<span class="first-run-done" aria-label="done">&#x2713;</span> ' : ""}${html}</li>`;
+  const login = handoffAvailable
+    ? `<button class="task-go" data-command="login" data-handoff="1"
+               data-options='{}'>Log in</button>`
+    : `run <code>${esc(terminalCommand("login"))}</code> in a terminal`;
+  return `<ol class="first-run">
+    ${step(s.login_saved, `Log in to HumbleBundle: ${login}${s.login_saved
+      ? " (a login is saved; log in again if a fetch says it expired)" : ""}`)}
+    ${step(false, `Fetch your library: run <strong>Update everything</strong>
+      in <a href="#/tasks">Tasks</a>.`)}
+    ${step(s.game_stores > 0, `Optional: <strong>Import game libraries</strong>
+      in <a href="#/tasks">Tasks</a>, and add API keys for better matches
+      (README, &ldquo;Optional API keys&rdquo;).`)}
+  </ol>`;
+}
+
+function emptyStateHtml() {
+  const text = esc(emptyStateText());
+  return !loadError && !READ_ONLY && items.length === 0 && setupState
+    ? text + firstRunChecklist(setupState) : text;
 }
 
 // Below this width the 22-column table is unusable (measured at 375 px:
@@ -1144,14 +1172,14 @@ function render() {
   const status = $("#table-status");
   if (status) status.textContent = rows.length === 0 ? emptyStateText() : "";
   if (rows.length === 0) {
-    const text = esc(emptyStateText());
+    const text = emptyStateHtml();
     // colspan 99 rather than the column count: the count is declared in
     // index.html's <thead> and would have to be kept in step here, and a
     // colspan larger than the row is clamped, not an error.
     $("#catalog tbody").innerHTML = narrow
       ? "" : `<tr class="table-empty"><td colspan="99">${text}</td></tr>`;
     $("#card-list").innerHTML = narrow
-      ? `<p class="list-empty">${text}</p>` : "";
+      ? `<div class="list-empty">${text}</div>` : "";
   } else if (narrow) {
     $("#catalog tbody").innerHTML = "";
     $("#card-list").innerHTML = renderCards(drawn, revealed)

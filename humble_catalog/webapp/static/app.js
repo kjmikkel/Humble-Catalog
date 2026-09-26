@@ -35,6 +35,11 @@ const $ = (sel) => document.querySelector(sel);
 // the advice an empty catalog would.
 let loadError = false;
 
+// What a first run on an empty catalog has already done, from /api/setup
+// (#99). Asked only while the catalog is empty, and null otherwise or
+// when the answer could not be had: the empty line then stands alone.
+let setupState = null;
+
 async function load() {
   // Outside the guarded loop below, this line was the one unprotected
   // fetch in load(): a server that had stopped threw here, boot() logged
@@ -48,6 +53,14 @@ async function load() {
     loadError = true;
   }
   foldCache.clear();
+  setupState = null;
+  if (!READ_ONLY && !loadError && items.length === 0) {
+    try {
+      setupState = await (await fetch("/api/setup")).json();
+    } catch (err) {
+      console.error("could not read /api/setup:", err);
+    }
+  }
   // The four renderers are independent, so one failing must not take out
   // the rest. render() used to run first and unguarded: a single item
   // with a missing field threw here and left the table AND all three

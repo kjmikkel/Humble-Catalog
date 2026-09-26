@@ -802,6 +802,19 @@ def _register_write_routes(app):
                             "the terminal"}), 409
         return None
 
+    @app.get("/api/setup")
+    def setup():
+        """What the empty Library's first-run checklist ticks from (#99).
+
+        No cookie is read and no request made: a login counts as saved once
+        the browser profile `login` writes exists. Whether it is still
+        valid is for the next fetch to say, which it already does.
+        """
+        stores = conn().execute("SELECT COUNT(*) FROM game_imports").fetchone()
+        return jsonify({
+            "login_saved": Path(app.config["PROFILE_DIR"]).is_dir(),
+            "game_stores": stores[0]})
+
     @app.get("/api/backups")
     def backups():
         # So restore is chosen from a list, never typed as a path.
@@ -953,6 +966,9 @@ def create_app(db_path="catalog.db", covers_dir="covers", backups_dir="backups")
     # Where `backup` writes by default, relative to the working directory
     # like catalog.db itself. The restore picker lists it.
     app.config["BACKUPS_DIR"] = backups_dir
+    # Where `login` saves the browser session (humble_api's default),
+    # relative to the working directory like catalog.db.
+    app.config["PROFILE_DIR"] = ".playwright-profile"
     # One runner per app. Held in config rather than a module global so a
     # test can swap in a stub, and so two apps in one process (the suite
     # makes several) never share a job slot.
