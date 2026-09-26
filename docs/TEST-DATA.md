@@ -40,7 +40,7 @@ titleized, so these keep the casing they are written with here.
 
 | Title | Author(s) | Publisher | Notes |
 |---|---|---|---|
-| Building Widget Services 2e / Building Widget Services, 2nd Edition / , 2nd ed. | — | Example Press | edition-variant duplicate pair |
+| Building Widget Services 2e / Building Widget Services, 2nd Edition / , 2nd ed. | — | Example Press | edition-variant duplicate pair; also the 1.00 overlap in the bundle-preview overlap-sort test |
 | Learning Widget-Driven Design, 1st Edition | — | — | edition-suffix title cleanup |
 | Learn C# / Learn C / Learn Java | — | — | `#`/`+` significance in dedupe |
 | The Widget Programming Language, 2nd Edition | Sam Coder, Alex Dev | — | O'Reilly-source payload |
@@ -52,7 +52,9 @@ titleized, so these keep the casing they are written with here.
 | A Quiet Life in Harbors | — | — | relevance-ordering foil for *The Quiet Harbor* |
 | The World of Examplia | — | — | acronym-tier fuzzy search ("woe"); also a bundle name |
 | Salt and Sextant | — | — | ebook half of the marker-suffix edition pair (`editions.edition_key`) |
+| Salt & Sextant | — | — | ampersand drift offered against the owned *Salt and Sextant*; scores 0.92 through `clean_title` + `token_set_ratio`, the lowest overlap in the bundle-preview overlap-sort test |
 | The Copper Almanac | — | — | ebook half of the `(audio)`-classification edition pair |
+| The Copper Almanacs | — | — | plural drift offered against the owned *The Copper Almanac*; scores 0.97, the middle overlap in the bundle-preview overlap-sort test |
 | Compass | — | — | one-word subset-trap foil: `token_set_ratio` scores it 100 against *The Compass of Broken Years Audiobook*, and it must **not** group |
 | Nightjar Post | — | — | comic↔ebook edition pair; the case the catalog does not yet hold |
 | Audio Engineering Handbook | — | — | a leading "audio" that is part of the title, pinning the trailing-only marker strip |
