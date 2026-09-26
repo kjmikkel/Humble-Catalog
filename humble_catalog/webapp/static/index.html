@@ -165,18 +165,27 @@
     <div id="keys-panel"></div>
   </section>
   <section id="section-bundles" hidden>
-    <p id="bundle-empty" class="section-empty">Paste a Humble bundle URL to compare each tier's
-      owned and new items with your catalog. To preview this month's Choice,
-      use the Choice button below; no URL is needed.</p>
-    <div id="bundle-form">
-      <input id="bundle-url" aria-label="Humble bundle URL to preview" type="url" size="60"
-             placeholder="Paste a HumbleBundle page URL to see what you already own">
-      <button id="bundle-go">Check bundle</button>
+    <p id="bundle-empty" class="section-empty">Compare a Humble bundle, or this
+      month's Choice, with your catalog: what each tier holds that you already
+      own, and what would be new.</p>
+    <!-- Both actions first, both results below them, so a bundle result
+         never pushes the Choice button down the page (#90). -->
+    <div class="bundle-actions">
+      <div id="bundle-form" class="bundle-action">
+        <h3>A bundle</h3>
+        <div class="bundle-url-row">
+          <input id="bundle-url" aria-label="Humble bundle URL to preview" type="url"
+                 placeholder="Paste a HumbleBundle page URL">
+          <button id="bundle-go">Check bundle</button>
+        </div>
+      </div>
+      <div id="choice-form" class="bundle-action">
+        <h3>This month's Choice</h3>
+        <p>No URL needed.</p>
+        <button id="choice-go">Check this month's Choice</button>
+      </div>
     </div>
     <div id="bundle-panel" hidden></div>
-    <div id="choice-form">
-      <button id="choice-go">Check this month's Choice</button>
-    </div>
     <div id="choice-panel" hidden></div>
   </section>
 

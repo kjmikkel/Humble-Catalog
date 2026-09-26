@@ -476,8 +476,20 @@ a { color: var(--accent); }
                               background: var(--surface); color: var(--fg); }
 #status-filter .status-chip.on { outline: 2px solid var(--accent);
                                  font-weight: 600; }
-#bundle-form { margin: .5rem 0; display: flex; gap: .5rem; }
-#bundle-url { flex: 1 1 auto; }
+/* The two actions as cards, side by side, results below both (#90). The
+   URL card is capped: uncapped, its box ran the width of the window with
+   the button stranded at the far edge. They wrap into a column on a
+   phone. */
+#bundle-empty { max-width: 70ch; margin: 0; }
+.bundle-actions { display: flex; flex-wrap: wrap; gap: .75rem;
+                  align-items: stretch; }
+.bundle-action { background: var(--surface); border: 1px solid var(--border);
+                 border-radius: 6px; padding: .6rem .8rem; }
+.bundle-action h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.bundle-action p { margin: 0 0 .4rem; color: var(--muted); }
+#bundle-form { flex: 0 1 36rem; }
+.bundle-url-row { display: flex; gap: .5rem; }
+#bundle-url { flex: 1 1 auto; min-width: 0; }
 #bundle-panel { margin-bottom: .75rem; }
 .bundle-tiers td { padding: .15rem .6rem .15rem 0; }
 .bundle-price { text-align: right; font-variant-numeric: tabular-nums; }
