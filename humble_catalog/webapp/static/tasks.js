@@ -68,7 +68,18 @@ const TASK_GROUPS = ["Update everything", "Update", "Enrich", "Import",
 // Set apart from the rest, which are its steps and the occasional extras.
 const PRIMARY_GROUP = "Update everything";
 
+// Whether the server can hand a command to a terminal. A viewer started
+// detached has none (#98), and /api/jobs says so; until the first poll
+// answers, the cards assume the usual case.
+let handoffAvailable = true;
+
+function terminalCommand(command) {
+  return `python -m humble_catalog ${command}`
+    + (command === "restore" ? " backups/<snapshot>" : "");
+}
+
 function taskCard(c) {
+  const dead = c.handoff && !handoffAvailable;
   const picker = c.picker === "snapshot" ? `
     <div class="task-picker">
       <select id="restore-snapshot" aria-label="Snapshot to restore"></select>
@@ -79,6 +90,10 @@ function taskCard(c) {
       <div class="task-label">${esc(c.label)}${c.handoff
         ? ` <span class="task-terminal">uses the terminal</span>` : ""}</div>
       <div class="task-note">${esc(c.note)}</div>
+      ${dead ? `<div class="task-note task-no-terminal">This viewer has
+        no terminal to hand this to. Run
+        <code>${esc(terminalCommand(c.command))}</code> in one instead.</div>`
+        : ""}
       ${picker}
       ${c.command === "import_sheets" ? `
       <div id="task-upload">
@@ -90,7 +105,7 @@ function taskCard(c) {
       <button class="task-go"${c.picker === "snapshot" ? ' id="restore-go"' : ""}
               data-command="${esc(c.command)}"${c.handoff ? ' data-handoff="1"' : ""}
               data-options='${esc(JSON.stringify(c.options || {}))}'
-              >Run</button>
+              ${dead ? "disabled" : ""}>Run</button>
     </div>`;
 }
 
@@ -279,12 +294,17 @@ function renderJobPanel(state) {
         : ` (exit ${esc(handed.exit_code)})`}; the terminal shows what it did.</div>`);
   const log = state.log || [];
   const hint = log.some((line) => EXPIRED.test(line));
+  const canHand = !(state.handoff && state.handoff.available === false);
   if (hint)
-    parts.push(`<div class="job-hint">Your HumbleBundle session has expired.
+    parts.push(canHand
+      ? `<div class="job-hint">Your HumbleBundle session has expired.
       <button class="task-go" data-command="login" data-handoff="1"
               data-options='{}'>Log in</button>
       (or run <code>python -m humble_catalog login</code> in the terminal
-      running this viewer), then try again.</div>`);
+      running this viewer), then try again.</div>`
+      : `<div class="job-hint">Your HumbleBundle session has expired. Run
+      <code>python -m humble_catalog login</code> in a terminal, then try
+      again.</div>`);
   if (log.length) parts.push(jobLogHtml(log));
   // Rebuild only when the panel's SHAPE changes; a poll during a run
   // patches instead, so the log keeps its scroll position and Cancel
@@ -292,7 +312,7 @@ function renderJobPanel(state) {
   // exist, never the numbers that merely change.
   const shape = JSON.stringify([running && running.command, Boolean(row),
                                 state.last && state.last.state, Boolean(handed),
-                                hint, log.length > 0]);
+                                hint, canHand, log.length > 0]);
   if (shape !== jobShape) {
     jobShape = shape;
     el.innerHTML = parts.join("");
@@ -330,8 +350,16 @@ let lastFinished;
 async function pollJobs() {
   const state = await (await fetch("/api/jobs")).json();
   renderJobPanel(state);
+  // An absent flag is an older server, which always had a terminal.
+  const available = !(state.handoff && state.handoff.available === false);
+  const redraw = available !== handoffAvailable;
+  if (redraw) {
+    handoffAvailable = available;
+    renderTasks();
+  }
   const finished = state.last ? state.last.finished_at : null;
-  if (finished !== lastFinished) {
+  const ended = finished !== lastFinished;
+  if (ended || redraw) {
     // The first poll only learns the history: a job that ended before the
     // page loaded is already in what boot()'s load() fetched.
     const firstPoll = lastFinished === undefined;
@@ -339,8 +367,9 @@ async function pollJobs() {
     // A job that finished while the page watched may have changed the
     // catalog, which used to stay stale until a manual reload (#100).
     // Before loadBackups(): load() re-renders the task cards, and with
-    // them the snapshot picker, which would come back empty.
-    if (!firstPoll && finished
+    // them the snapshot picker, which would come back empty. A redraw
+    // alone empties the picker the same way, so it reloads the list too.
+    if (ended && !firstPoll && finished
         && !LEAVES_CATALOG_ALONE.includes(state.last.command))
       await load().catch((err) => console.error("load() failed:", err));
     // Awaited so a test can count the request; still never fatal.
@@ -359,7 +388,7 @@ function renderBackups(list) {
         </option>`).join("")
     : `<option value="">No snapshots in backups/ yet</option>`;
   sel.disabled = list.length === 0;
-  if (go) go.disabled = list.length === 0;
+  if (go) go.disabled = list.length === 0 || !handoffAvailable;
   return sel.innerHTML;
 }
 

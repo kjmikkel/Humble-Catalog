@@ -177,7 +177,7 @@ def test_serve_uses_default_port(monkeypatch):
                         lambda **kw: seen.update(kw))
     monkeypatch.setattr(sys, "argv", ["humble_catalog", "serve"])
     main()
-    assert seen == {"port": 8087}
+    assert seen == {"port": 8087, "terminal_commands": True}
 
 def test_serve_accepts_a_port(monkeypatch):
     # the wrapper scripts honour HUMBLE_PORT, which is a lie unless the
@@ -188,7 +188,7 @@ def test_serve_accepts_a_port(monkeypatch):
     monkeypatch.setattr(sys, "argv",
                         ["humble_catalog", "serve", "--port", "8091"])
     main()
-    assert seen == {"port": 8091}
+    assert seen == {"port": 8091, "terminal_commands": True}
 
 def test_export_command_selects_columns(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
@@ -427,6 +427,28 @@ def test_extract_no_login_reports_an_expired_session_without_a_traceback(
     with pytest.raises(SystemExit) as exc:
         main()
     assert "login" in str(exc.value)
+
+
+def test_serve_no_handoff_turns_the_terminal_commands_off(monkeypatch):
+    # What the detached wrappers pass (#98): their console is hidden, so a
+    # handed-over reset would wait for input nobody can type.
+    seen = {}
+    monkeypatch.setattr("humble_catalog.webapp.serve",
+                        lambda **kw: seen.update(kw))
+    monkeypatch.setattr(sys, "argv", ["humble_catalog", "serve",
+                                      "--no-handoff"])
+    main()
+    assert seen == {"port": 8087, "terminal_commands": False}
+
+
+def test_serve_lan_passes_no_handoff_too(monkeypatch):
+    seen = {}
+    monkeypatch.setattr("humble_catalog.webapp.serve",
+                        lambda **kw: seen.update(kw))
+    monkeypatch.setattr(sys, "argv", ["humble_catalog", "serve", "--lan",
+                                      "--no-handoff"])
+    main()
+    assert seen["terminal_commands"] is False
 
 
 def test_serve_lan_passes_its_options(monkeypatch):

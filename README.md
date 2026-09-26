@@ -323,7 +323,9 @@ runs there — `reset` and `restore` still ask you to type `RESET` or
 during the command cancels it and brings the viewer back; a second
 Ctrl-C quits `serve` as usual. A restore is chosen from the snapshots
 already in `backups/`. The handoff needs a viewer started with
-`python -m humble_catalog serve`; one started any other way says so.
+`python -m humble_catalog serve` in a terminal you can see. A viewer
+with no terminal — started detached, or with `serve --no-handoff` —
+shows those three cards disabled, with the command to run yourself.
 
 The viewer's tabs are described [at the top of this
 page](#humble-catalog); what follows is what the Library table itself

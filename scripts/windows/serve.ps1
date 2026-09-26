@@ -1,7 +1,9 @@
 # Start the catalog viewer.
 #
 # Foreground by default (Ctrl+C stops it). -Detached runs it in the
-# background and returns; use stop.ps1 to shut that one down.
+# background and returns; use stop.ps1 to shut that one down. A detached
+# viewer has no console anyone can see, so it is started with
+# --no-handoff: login, reset and restore are then run from a terminal.
 #
 # Restart after changing Python code. A running server serves static
 # files from disk on every request but holds its Python in memory, so a
@@ -19,7 +21,7 @@ if ($listening) {
 
 if ($Detached) {
     $proc = Start-Process -FilePath $Python `
-        -ArgumentList "-m", "humble_catalog", "serve", "--port", "$Port" `
+        -ArgumentList "-m", "humble_catalog", "serve", "--port", "$Port", "--no-handoff" `
         -WorkingDirectory $Root -PassThru -WindowStyle Hidden
     Write-Host "Viewer started detached on port $Port (PID $($proc.Id))."
     Write-Host "Stop it with: .\scripts\windows\stop.ps1"
