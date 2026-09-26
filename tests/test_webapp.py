@@ -3431,3 +3431,18 @@ def test_the_action_cards_use_theme_colours():
                      ".bundle-action")
     assert "var(--surface)" in rule and "var(--border)" in rule
     assert "#" not in rule
+
+
+def test_the_tier_table_is_compact_and_its_numbers_line_up():
+    # #91: stretched across the page, the three numbers were ~600 px apart.
+    css = (_STATIC / "style.css").read_text(encoding="utf-8")
+    assert "width: auto" in _css_rule(css, ".bundle-tiers")
+    num = _css_rule(css, ".bundle-num")
+    assert "text-align: right" in num and "tabular-nums" in num
+
+
+def test_the_tier_bar_uses_theme_colours():
+    css = (_STATIC / "style.css").read_text(encoding="utf-8")
+    for selector in (".bundle-bar-owned", ".bundle-bar-new"):
+        rule = _css_rule(css, selector)
+        assert "fill: var(--" in rule and "#" not in rule, selector

@@ -491,8 +491,22 @@ a { color: var(--accent); }
 .bundle-url-row { display: flex; gap: .5rem; }
 #bundle-url { flex: 1 1 auto; min-width: 0; }
 #bundle-panel { margin-bottom: .75rem; }
+/* Compact, not page-wide: stretched, the three counts sat ~600 px apart
+   (#91). Numbers right-aligned in tabular figures so they line up. */
+.bundle-tiers { width: auto; border-collapse: collapse; }
+.bundle-tiers th { text-align: right; font-weight: 600; color: var(--muted);
+                   padding: .15rem .6rem .15rem 0; }
 .bundle-tiers td { padding: .15rem .6rem .15rem 0; }
 .bundle-price { text-align: right; font-variant-numeric: tabular-nums; }
+.bundle-num { text-align: right; font-variant-numeric: tabular-nums; }
+.bundle-bar { display: block; width: 8rem; height: .6rem; }
+.bundle-bar-rest { fill: var(--border); }
+/* Lighter than `new`, which is the part worth buying; at full strength
+   --muted and --accent were too close to tell apart in the light theme. */
+.bundle-bar-owned { fill: var(--muted); fill-opacity: .45; }
+.bundle-key { text-align: left; font-weight: normal; font-size: .85em; }
+.bundle-key svg { width: .7em; height: .7em; vertical-align: baseline; }
+.bundle-bar-new { fill: var(--accent); }
 .bundle-overlaps h4 { margin: .6rem 0 .2rem; font-size: 1em; }
 .bundle-overlaps ul { margin: 0; padding-left: 1.2rem; }
 .bundle-series h4 { margin: .6rem 0 .2rem; font-size: 1em; }
