@@ -195,3 +195,50 @@ def test_flags_is_the_shared_option_validator():
                       {"ignore_quota": True}) == ["--ignore-quota"]
     with pytest.raises(ValueError, match="does not accept"):
         jobs.flags("reparse", {}, {"x": True})
+
+
+# -- update runs other commands' steps (#101) ---------------------------
+
+def test_argv_for_update_never_logs_in_and_takes_its_options():
+    # Its first step is extract, which must not open a browser window the
+    # page cannot show.
+    assert jobs.argv("update", {"games": True, "no_harvest": True}) == [
+        sys.executable, "-m", "humble_catalog", "update", "--no-login",
+        "--games", "--no-harvest"]
+
+
+def test_update_is_refused_while_one_of_its_steps_runs_elsewhere(monkeypatch,
+                                                                 tmp_path):
+    # A harvest started in a terminal is invisible to the runner except
+    # through its row; an update started now would run a second one.
+    runner = _fake_runner(monkeypatch, tmp_path, "pass")
+    _record_run("harvest")
+    with pytest.raises(jobs.Busy, match="harvest"):
+        runner.start("update")
+
+
+# The CHILD writes the step's row and dies mid-step, as a cancelled update
+# does. Writing it from the test instead would race the child's exit.
+_DIES_MID_HARVEST = (
+    "from humble_catalog import db;"
+    "c = db.connect('catalog.db');"
+    "c.execute(\"INSERT OR REPLACE INTO run_status "
+    "(command, phase, done, total, current, started_at, updated_at) "
+    "VALUES ('harvest','Title',1,9,'x','t','t')\");"
+    "c.commit(); raise SystemExit(1)")
+
+
+def test_a_finished_update_retires_its_steps_rows(monkeypatch, tmp_path):
+    # A cancelled update never reaches the step's own finish(), so its row
+    # would keep the banner reporting a harvest that is over.
+    runner = _fake_runner(monkeypatch, tmp_path, _DIES_MID_HARVEST)
+    runner.start("update")
+    runner.wait(timeout=30)
+    assert _phase("harvest") == "done"
+
+
+def test_another_job_leaves_update_step_rows_alone(monkeypatch, tmp_path):
+    runner = _fake_runner(monkeypatch, tmp_path, _DIES_MID_HARVEST)
+    runner.start("reparse")
+    runner.wait(timeout=30)
+    assert _phase("harvest") == "Title"

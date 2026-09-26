@@ -8,6 +8,17 @@
 // here are a menu of those two whitelists, never a second definition of
 // either -- a test pins each set equal.
 const TASK_CARDS = [
+  // The one card a routine update needs (#101). update runs the Update
+  // and Enrich cards below in order, in one job.
+  {group: "Update everything", command: "update", label: "Update everything",
+   note: "Fetches new bundles, harvests their metadata, then matches and fills. "
+       + "Stops at the first failure, but a spent daily quota does not stop it: "
+       + "running it again later continues the harvest. Minutes for a few new "
+       + "bundles, hours on a first run."},
+  {group: "Update everything", command: "update",
+   label: "Update everything, and game libraries", options: {games: true},
+   note: "The same, then imports your game libraries so bundle and key "
+       + "checks see new games too."},
   {group: "Update", command: "extract", label: "Fetch new bundles",
    note: "Asks HumbleBundle for purchases you have not catalogued yet. Minutes."},
   {group: "Update", command: "login", label: "Log in to HumbleBundle",
@@ -52,8 +63,10 @@ const TASK_CARDS = [
 
 // Danger is last and set apart: reset is the one card whose worst case
 // is losing hand edits, merges and overrides.
-const TASK_GROUPS = ["Update", "Enrich", "Import", "Backup", "Diagnose",
-                     "Danger"];
+const TASK_GROUPS = ["Update everything", "Update", "Enrich", "Import",
+                     "Backup", "Diagnose", "Danger"];
+// Set apart from the rest, which are its steps and the occasional extras.
+const PRIMARY_GROUP = "Update everything";
 
 function taskCard(c) {
   const picker = c.picker === "snapshot" ? `
@@ -85,10 +98,12 @@ function renderTasks() {
   const el = $("#task-cards");
   if (!el) return;
   el.innerHTML = TASK_GROUPS.map((group) => `
-    <div class="task-group${group === "Danger" ? " task-danger" : ""}">
+    <div class="task-group${group === "Danger" ? " task-danger" : ""}${
+        group === PRIMARY_GROUP ? " task-primary" : ""}">
       <h3>${esc(group)}</h3>
       ${TASK_CARDS.filter((c) => c.group === group).map(taskCard).join("")}
-    </div>`).join("");
+    </div>${group === PRIMARY_GROUP
+      ? `<h2 class="task-steps-heading">Individual steps</h2>` : ""}`).join("");
   return el.innerHTML;
 }
 

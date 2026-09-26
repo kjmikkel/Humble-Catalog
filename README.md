@@ -139,6 +139,18 @@ it, then read it.
 
 ### Building the catalog
 
+- `python -m humble_catalog update` - the whole import in one go:
+  `extract`, `harvest`, `enrich` and `enrich --series`, in that order,
+  each described below. It stops at the first step that fails (an
+  expired login stops it before anything is harvested), with a line
+  saying which step. A harvest that runs out of a source's daily quota
+  does **not** stop it: enrichment works with what is cached, the
+  summary names the sources still behind, and running `update` again
+  later continues the harvest where it stopped. `--games` also imports
+  your game libraries at the end, and `--no-harvest` refreshes from the
+  cache without any metadata requests. This is what the viewer's
+  **Update everything** card runs. Use the individual commands below
+  when you want one step on its own.
 - `python -m humble_catalog extract` - fetch your library.
   First run opens a normal browser window: log in to HumbleBundle
   (Google + TFA), then close the window when your library is visible.
@@ -293,9 +305,11 @@ table is counts, source names and timestamps only.
   running extract/enrich shows in a banner; closing the browser never
   interrupts them.
 
-The viewer's **Tasks** tab runs the catalog commands for you: fetching new
-bundles, harvesting, enriching, importing a spreadsheet or your game
-libraries, and taking a backup. Each runs as a separate process with its
+The viewer's **Tasks** tab runs the catalog commands for you. **Update
+everything** at the top runs `update`, which is all a routine refresh
+needs. Below it, under **Individual steps**: fetching new bundles,
+harvesting, enriching, importing a spreadsheet or your game libraries,
+and taking a backup. Each runs as a separate process with its
 progress, its output and a Cancel button on the page. A command started
 in a terminal still shows in the banner, as it always did.
 

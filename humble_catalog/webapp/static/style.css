@@ -585,6 +585,13 @@ tr.key-is-hidden td { opacity: .6; }
 .task-picker { grid-column: 1; display: flex; gap: .6rem; flex-wrap: wrap;
                align-items: center; }
 .task-picker select { max-width: 100%; }
+/* Update everything (#101): the one card a routine update needs, so it
+   is marked as the page's primary action and the rest sit under their own
+   heading as its steps. Accent tokens only, which every theme redefines. */
+.task-primary .task-card { border: 2px solid var(--accent); }
+.task-primary .task-label { font-size: 1.05rem; }
+.task-steps-heading { margin: 0 0 .75rem; padding-top: 1rem; font-size: 1.1rem;
+                      border-top: 1px solid var(--border); }
 .task-danger { padding-top: 1rem; border-top: 1px solid var(--panel-warn-border); }
 .task-danger .task-card { border-color: var(--panel-warn-border); }
 /* One card per line left a 1920 px screen with cards 1873 px wide around
