@@ -519,6 +519,25 @@ while `leak_check.py` reports `SKIPPED` for want of a catalog and only
 proves the gate still executes on a fresh clone. The term check that
 means something is the local one, before you commit.
 
+**Releases** (`.github/workflows/release.yml`) are cut by pushing a
+tag. Bump `version` in `pyproject.toml` in a PR, merge it, then tag the
+merge commit on `main`:
+
+```
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+The workflow builds the wheel and sdist, then runs
+`scripts/check_release.py`. It refuses a tag that does not match the
+version, a `dist/` holding anything but one wheel and one sdist, a wheel
+missing any of the viewer's files, and a tag on a commit that is not on
+`main`. It then installs the wheel into a fresh environment, checks
+that it serves the viewer, and only then publishes a GitHub release with
+both files attached and notes generated from the merged PRs. A pull
+request that changes any of the release files gets the same run as a
+dry run, which publishes nothing. There is no PyPI upload.
+
 ### Viewing on your phone
 
 `python -m humble_catalog serve --lan` also serves a **read-only** copy of

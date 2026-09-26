@@ -11,7 +11,9 @@ has one name everywhere. Pick the folder for your platform:
 The `.py` files in this directory are tools, not wrappers: `leak_check.py`
 is the privacy gate, `leak_check_history.py` is its counterpart for git
 history, `check_no_data_tracked.py` refuses to let data files be
-committed at all, the `capture_*.py` scripts record API fixtures,
+committed at all, `check_release.py` is the gate the release workflow
+runs before publishing (see the README's Development section), the
+`capture_*.py` scripts record API fixtures,
 `demo_catalog.py` serves the viewer against a throwaway catalog of
 invented titles, and `make_favicon.py` regenerates the viewer's icon. Its output is committed,
 so run it only after editing the palette; `favicon_tuner.html` is a
