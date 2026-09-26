@@ -4224,3 +4224,37 @@ def test_the_bar_has_a_key_in_its_header():
     head = table[table.index("<thead>"):table.index("</thead>")]
     assert 'class="bundle-bar-owned"' in head and "owned" in head
     assert 'class="bundle-bar-new"' in head and "new" in head
+
+
+# -- Overlap and possible scores read as words (#93) ---------------------
+# "(0.92)" named no scale and no direction. The server now sends a word;
+# the number moves into a tooltip, so it is still there for whoever wants
+# it.
+
+def _overlap_line(html, offered):
+    start = html.index(offered)
+    return html[start:html.index("</li>", start)]
+
+
+def test_a_bundle_overlap_shows_its_word_not_the_bare_number():
+    report = json.loads(json.dumps(_BUNDLE_REPORT))
+    report["overlaps"][0]["strength"] = "loose match"
+    line = _overlap_line(_render_bundle(report), "Shadow Hound Vol. 1-6 ~")
+    assert ">loose match<" in line
+    assert "(0.92)" not in line
+    assert re.search(r'title="[^"]*0\.92[^"]*"', line)
+
+
+def test_a_choice_possible_shows_its_word_not_the_bare_number():
+    report = json.loads(json.dumps(_CHOICE_REPORT))
+    report["possible_items"][0]["strength"] = "loose match"
+    line = _overlap_line(_render_choice(report), "Starfall Rally Turbo")
+    assert ">loose match<" in line
+    assert "(0.86)" not in line
+    assert re.search(r'title="[^"]*0\.86[^"]*"', line)
+
+
+def test_an_older_server_without_a_word_still_shows_the_score():
+    # _BUNDLE_REPORT carries no strength, as a payload from before #93.
+    line = _overlap_line(_render_bundle(_BUNDLE_REPORT), "Shadow Hound Vol. 1-6 ~")
+    assert "0.92" in line

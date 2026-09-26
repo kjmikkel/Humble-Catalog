@@ -78,6 +78,17 @@ async function previewBundle(url) {
   });
 }
 
+// How sure a fuzzy title match is, as a word (#93). "(0.91)" named no
+// scale and no direction. The server picks the word (bundle_preview.CLOSE)
+// so both panels mean the same score by it; the number stays in the
+// tooltip. A payload from an older server has no word, so it keeps the
+// number it always showed.
+function matchStrength(hit) {
+  const score = hit.score.toFixed(2);
+  if (!hit.strength) return `<span class="bundle-score">(${score})</span>`;
+  return `<span class="bundle-score" title="Title similarity ${score}, where 1.00 is identical">${esc(hit.strength)}</span>`;
+}
+
 function renderBundleGuidance() {
   $("#bundle-empty").hidden = !!(bundlePreview || bundlePreviewError
     || choicePreview || choicePreviewError);
@@ -195,7 +206,7 @@ function renderBundlePreview() {
         ${esc(o.offered)} ~
         <button class="bundle-jump" data-item="${o.item_id}"
           >${esc(o.item_name)}</button>
-        <span class="bundle-score">(${o.score.toFixed(2)})</span></li>`)
+        ${matchStrength(o)}</li>`)
         .join("")}</ul></section>` : "";
   panel.innerHTML = `<details${bundlePreviewOpen ? " open" : ""}>
     <summary>${esc(bundlePreview.name)}</summary>
@@ -279,7 +290,7 @@ function renderChoicePreview() {
     `${c.possible} possible (counted as neither owned nor new)`,
     (c.possible_items || []).map((p) => `${esc(p.offered)} ~
       ${esc(p.owned_title)}
-      <span class="bundle-score">(${p.score.toFixed(2)})</span>`));
+      ${matchStrength(p)}`));
   const warnings = (c.unimported_stores || []).map((s) => `
     <p class="bundle-error">WARNING: this month delivers on ${esc(s)}, which
     has never been imported — its unmatched games are counted as new by

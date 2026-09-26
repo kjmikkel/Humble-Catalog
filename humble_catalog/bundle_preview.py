@@ -29,6 +29,18 @@ from humble_catalog.titles import clean_title
 # caught exactly the genuine omnibus/volume pairs.
 OVERLAP = 90.0
 
+# Where a shown score stops reading "loose" and starts reading "close"
+# (#93). One line for both panels, so the word means the same score in
+# each: book overlaps (OVERLAP and up) split across it, and a Choice
+# `possible` (below game_match.GAME_OWNED) is always loose, which is true:
+# none was close enough to count as owned.
+CLOSE = 95.0
+
+
+def strength(score):
+    """The word the viewer shows for a 0-1 similarity score."""
+    return "close match" if score * 100 >= CLOSE - 1e-9 else "loose match"
+
 # The game-ownership cutoffs and classify_game live in game_match, which
 # this module imports: the key report is a second caller, and it treats the
 # band between them the opposite way round. See that module's docstring.
@@ -123,8 +135,12 @@ def _overlaps(conn, candidates):
         if hit is None:
             continue
         row = rows[hit[2]]
+        # The word from the ROUNDED score, the one the tooltip shows: from
+        # the raw one, 0.949 read "loose" beside a printed 0.95.
+        score = round(hit[1] / 100, 2)
         found.append({"offered": offered, "item_id": row["id"],
-                      "item_name": row["name"], "score": round(hit[1] / 100, 2)})
+                      "item_name": row["name"], "score": score,
+                      "strength": strength(score)})
     found.sort(key=lambda o: o["score"], reverse=True)
     return found
 
@@ -270,7 +286,7 @@ def preview(conn, bundle, url=None):
             if verdict == "owned":
                 owned_count += 1
             elif verdict == "possible":
-                possible.append(match)
+                possible.append({**match, "strength": strength(match["score"])})
             else:
                 new_names.append(name)
                 unmatched_stores |= delivery_stores(item)
