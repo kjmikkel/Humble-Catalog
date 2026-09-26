@@ -3368,3 +3368,66 @@ def test_the_lan_viewer_has_no_setup_route(tmp_path):
     _app, client = _lan_client(tmp_path)
     _paired(client)
     assert client.get("/api/setup", base_url=LAN_BASE).status_code == 404
+
+
+# -- The Bundles section's two actions, side by side (#90) ---------------
+# At 1280 px the URL box ran ~1,144 px with Check bundle at the far edge,
+# and the Choice button sat on its own row BELOW the bundle result, so any
+# result pushed it down the page. Chosen from three mockups: two cards
+# side by side, each saying what it does, with both results below.
+
+_STATIC = Path(__file__).parent.parent / "humble_catalog" / "webapp" / "static"
+
+
+def _bundles_section():
+    html = (_STATIC / "index.html").read_text(encoding="utf-8")
+    start = html.index('<section id="section-bundles"')
+    return html[start:html.index("</section>", start)]
+
+
+def test_both_actions_come_before_both_results():
+    section = _bundles_section()
+    actions = section.index('class="bundle-actions"')
+    for form in ('id="bundle-form"', 'id="choice-form"'):
+        assert actions < section.index(form)
+    last_form = max(section.index('id="bundle-form"'),
+                    section.index('id="choice-form"'))
+    for panel in ('id="bundle-panel"', 'id="choice-panel"'):
+        assert section.index(panel) > last_form, panel
+
+
+def test_each_action_is_labelled():
+    section = _bundles_section()
+    bundle = section[section.index('id="bundle-form"'):
+                     section.index('id="choice-form"')]
+    choice = section[section.index('id="choice-form"'):
+                     section.index('id="bundle-panel"')]
+    assert "<h3>A bundle</h3>" in bundle
+    assert "<h3>This month's Choice</h3>" in choice
+    assert "No URL needed" in choice
+
+
+def test_the_actions_sit_side_by_side_and_stack_when_narrow():
+    rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
+                     ".bundle-actions")
+    assert "display: flex" in rule and "flex-wrap: wrap" in rule
+
+
+def test_the_url_card_is_capped_not_window_wide():
+    rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
+                     "#bundle-form")
+    assert re.search(r"flex: 0 1 \d+(\.\d+)?rem", rule), rule
+
+
+def test_the_introduction_wraps_at_a_readable_width():
+    rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
+                     "#bundle-empty")
+    assert re.search(r"max-width: \d+ch", rule), rule
+
+
+def test_the_action_cards_use_theme_colours():
+    # A literal colour would break one of the two themes.
+    rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
+                     ".bundle-action")
+    assert "var(--surface)" in rule and "var(--border)" in rule
+    assert "#" not in rule
