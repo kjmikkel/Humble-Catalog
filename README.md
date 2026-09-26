@@ -519,6 +519,12 @@ meaningfully make: `check_no_data_tracked.py` is a genuine gate there,
 while `leak_check.py` reports `SKIPPED` for want of a catalog and only
 proves the gate still executes on a fresh clone. The term check that
 means something is the local one, before you commit.
+A new push to a pull request cancels that PR's run still in progress;
+every push to `main` keeps its own complete run. Dependabot
+(`.github/dependabot.yml`) checks weekly for new versions of the
+workflows' actions, and for Python releases that fall outside a
+requirement in `pyproject.toml`, and opens a PR labelled
+`dependencies` for each group.
 
 **Releases** (`.github/workflows/release.yml`) are cut by pushing a
 tag. Bump `version` in `pyproject.toml` in a PR, merge it, then tag the
