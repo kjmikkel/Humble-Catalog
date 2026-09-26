@@ -95,16 +95,17 @@ def fetch_bundle(url, http=None):
 
 
 def _owned(conn):
-    """Every machine_name the catalog accounts for, as a set.
+    """{machine_name: item_id} for every machine_name the catalog accounts for.
 
     The merges half is load-bearing. A duplicate merged away is not an
     items row any more, but it still names a book that is in the library;
-    omitting it would report an owned item as new.
+    omitting it would report an owned item as new. It maps to the row it
+    was merged INTO, which is the one the viewer can link to (#92).
     """
     rows = conn.execute(
-        "SELECT machine_name FROM items "
-        "UNION SELECT dropped_machine_name FROM merges").fetchall()
-    return {row[0] for row in rows}
+        "SELECT machine_name, id FROM items "
+        "UNION SELECT dropped_machine_name, kept_item_id FROM merges").fetchall()
+    return {row[0]: row[1] for row in rows}
 
 
 def _overlaps(conn, candidates):
@@ -239,6 +240,13 @@ def preview(conn, bundle, url=None):
     # owner has on another store -- makes that sentence false. Only a `new`
     # verdict counts; a `possible` was not counted as new either.
     unmatched_stores = set()
+    # What is counted as owned, by machine_name so the same item in two
+    # cumulative tiers is listed once (#92). The counts said how many;
+    # this says which, which is the other half of "should I buy this".
+    owned_found = {}
+    # The row's own name, which the viewer's jump searches Library for;
+    # the bundle's spelling of a title need not match it.
+    row_names = dict(conn.execute("SELECT id, name FROM items").fetchall())
     ordered = []
     for key, display in shapes.as_mapping(
             bundle.get("tier_display_data")).items():
@@ -254,6 +262,11 @@ def preview(conn, bundle, url=None):
             item = shapes.as_mapping(items.get(name))
             if name in owned:
                 owned_count += 1
+                owned_found.setdefault(name, {
+                    "offered": shapes.as_text(item.get("human_name")) or name,
+                    "item_id": owned[name],
+                    "item_name": row_names.get(owned[name]),
+                    "owned_title": None, "keyed": False})
                 continue
             if not delivery_stores(item):
                 new_names.append(name)
@@ -282,9 +295,18 @@ def preview(conn, bundle, url=None):
                     keyed_hits.append({**keyed_match, "key_type": key_type,
                                        "bundle": bundle_name})
                     owned_count += 1
+                    owned_found.setdefault(name, {
+                        "offered": offered, "item_id": None, "item_name": None,
+                        "owned_title": keyed_match["owned_title"],
+                        "keyed": True})
                     continue
             if verdict == "owned":
                 owned_count += 1
+                # A game has no catalog row: it names what it matched in
+                # an imported library instead, and links nowhere.
+                owned_found.setdefault(name, {
+                    "offered": offered, "item_id": None, "item_name": None,
+                    "owned_title": match["owned_title"], "keyed": False})
             elif verdict == "possible":
                 possible.append({**match, "strength": strength(match["score"])})
             else:
@@ -363,6 +385,8 @@ def preview(conn, bundle, url=None):
         # suspicion -- so they are separate fields and never summed.
         "series": series_hits,
         "overlaps": _overlaps(conn, candidates),
+        "owned_items": sorted(owned_found.values(),
+                              key=lambda o: o["offered"].lower()),
     }
 
 
@@ -460,6 +484,19 @@ def format_report(report, encoding="utf-8"):
                 lines.append(f"                {hit['offered']}  ~  "
                              f"{hit['owned_title']}  ({hit['score']:.2f})")
             lines.append("")
+    # Which titles the owned counts are, once for the whole bundle (#92):
+    # the tiers are cumulative, so per tier would repeat them. A game says
+    # what it matched, since that match is by title and approximate.
+    if report.get("owned_items"):
+        lines += ["", f"  Already owned ({len(report['owned_items'])}):"]
+        for hit in report["owned_items"]:
+            line = f"    {hit['offered']}"
+            other = hit.get("owned_title") or hit.get("item_name")
+            if other and other != hit["offered"]:
+                line += f"  ~  {other}"
+            if hit.get("keyed"):
+                line += "  (Humble key)"
+            lines.append(line)
     # Before the overlap list and after the tiers: these are facts about
     # which volumes are held, where an overlap is a suspicion. Omitted
     # entirely when empty, as `adds` and `keyed_items` are.

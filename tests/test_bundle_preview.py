@@ -1120,3 +1120,85 @@ def test_a_game_tier_possible_carries_its_word(tmp_path):
     possible = _game_tiers(tmp_path)[0]["possible_items"]
     assert possible and all(
         p["strength"] == bundle_preview.strength(p["score"]) for p in possible)
+
+
+# -- Which titles are already owned (#92) --------------------------------
+# The report listed each tier's NEW titles but only COUNTED the owned
+# ones, which is half of "should I buy this". owned_items lists every
+# sold item counted as owned, once, bundle-wide (tiers are cumulative, so
+# per tier would repeat them). Books carry the catalog row to link to.
+
+def _book_report(tmp_path):
+    conn = _conn(tmp_path)
+    try:
+        return bundle_preview.preview(conn, _bundle())
+    finally:
+        conn.close()
+
+
+def test_owned_items_list_every_owned_book_with_its_row(tmp_path):
+    owned = _book_report(tmp_path)["owned_items"]
+    # The direct match and the merged-away reissue: both count toward
+    # "owned 2", so both are listed, and both lead to the kept row.
+    assert [(o["offered"], o["item_id"]) for o in owned] == [
+        ("The Quiet Harbor: A Novel", 1), ("The Quiet Harbor: A Novel", 1)]
+
+
+def test_owned_items_match_the_richest_tiers_owned_count(tmp_path):
+    report = _book_report(tmp_path)
+    assert len(report["owned_items"]) == max(t["owned"] for t in report["tiers"])
+
+
+def test_owned_games_name_what_they_matched_and_link_nowhere(tmp_path):
+    conn = _game_conn(tmp_path)
+    try:
+        report = bundle_preview.preview(conn, _game_bundle())
+    finally:
+        conn.close()
+    owned = report["owned_items"]
+    assert len(owned) == max(t["owned"] for t in report["tiers"])
+    games = [o for o in owned if o["item_id"] is None]
+    assert games and all(o["owned_title"] for o in games)
+    assert any(o["offered"] == "Widget Quest: Definitive Edition"
+               and o["owned_title"] == "Widget Quest" for o in games)
+
+
+def test_owned_items_are_sorted_by_title(tmp_path):
+    conn = _game_conn(tmp_path)
+    try:
+        owned = bundle_preview.preview(conn, _game_bundle())["owned_items"]
+    finally:
+        conn.close()
+    titles_ = [o["offered"].lower() for o in owned]
+    assert titles_ == sorted(titles_)
+
+
+def test_format_report_lists_what_is_already_owned(tmp_path):
+    out = bundle_preview.format_report(_report(tmp_path))
+    assert "Already owned (2):" in out
+    block = out[out.index("Already owned (2):"):]
+    assert block.count("The Quiet Harbor: A Novel") >= 2
+
+
+def test_an_owned_book_carries_the_name_of_its_row(tmp_path):
+    # The viewer's jump searches Library for the button's text, which must
+    # be the row's own name, not the bundle's spelling of it.
+    conn = _conn(tmp_path)
+    conn.execute("UPDATE items SET name = 'Quiet Harbor (Reissue)' WHERE id = 1")
+    conn.commit()
+    try:
+        owned = bundle_preview.preview(conn, _bundle())["owned_items"]
+    finally:
+        conn.close()
+    assert {o["item_name"] for o in owned} == {"Quiet Harbor (Reissue)"}
+
+
+def test_format_report_names_the_row_when_it_is_spelled_differently(tmp_path):
+    conn = _conn(tmp_path)
+    conn.execute("UPDATE items SET name = 'Quiet Harbor (Reissue)' WHERE id = 1")
+    conn.commit()
+    try:
+        out = bundle_preview.format_report(bundle_preview.preview(conn, _bundle()))
+    finally:
+        conn.close()
+    assert "The Quiet Harbor: A Novel  ~  Quiet Harbor (Reissue)" in out
