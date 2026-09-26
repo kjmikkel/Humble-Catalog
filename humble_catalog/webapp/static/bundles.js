@@ -23,15 +23,59 @@ function money(amount, currency) {
                 : `${currency} ${amount.toFixed(2)}`;
 }
 
+// ---- Shared by both checks --------------------------------------------
+
+// A report or an error, never a throw. Parsing used to happen before any
+// drawing, so a reply that was not JSON (a 500 page) or a request that
+// never arrived (a stopped server) threw past the renderer, and the panel
+// kept the PREVIOUS result under the newly pasted URL (#88). A wrong
+// answer that looks right is worse than any error message.
+async function fetchReport(url, body, fallback) {
+  let resp;
+  try {
+    resp = await post(url, body);
+  } catch (err) {
+    return {error: "could not reach the viewer -- is it still running?"};
+  }
+  let payload = null;
+  try {
+    payload = await resp.json();
+  } catch (err) {
+    // Not JSON: an HTML error page. Its status is all it can tell us.
+  }
+  if (resp.ok && payload) return {report: payload};
+  return {error: (payload && payload.error)
+                 || `${fallback} (the viewer answered ${resp.status})`};
+}
+
+// Runs `work` with its button disabled and saying so (#89). A Choice
+// check drives a logged-in fetch and takes seconds, and with no sign of
+// it the page looked dead -- and a second click sent a second request.
+// The disabled button is the lock: a click on it is not delivered, and a
+// call that arrives anyway (Enter in the URL box) is dropped here.
+async function whileChecking(selector, label, work) {
+  const btn = $(selector);
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  try {
+    await work();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
 async function previewBundle(url) {
-  bundlePreview = bundlePreviewError = null;
   // POST, never GET: a bundle URL in a query string reaches access logs
   // and browser history.
-  const resp = await post("/api/bundle-preview", {url});
-  const body = await resp.json();
-  if (resp.ok) bundlePreview = body;
-  else bundlePreviewError = body.error || "could not read that bundle";
-  renderBundlePreview();
+  await whileChecking("#bundle-go", "Check bundle", async () => {
+    const {report, error} = await fetchReport(
+      "/api/bundle-preview", {url}, "could not read that bundle");
+    bundlePreview = report || null;
+    bundlePreviewError = error || null;
+    renderBundlePreview();
+  });
 }
 
 function renderBundleGuidance() {
@@ -162,12 +206,13 @@ let choicePreview = null, choicePreviewError = null;
 let choicePreviewOpen = true;
 
 async function previewChoice() {
-  choicePreview = choicePreviewError = null;
-  const resp = await post("/api/choice-preview", {});
-  const body = await resp.json();
-  if (resp.ok) choicePreview = body;
-  else choicePreviewError = body.error || "could not read this month's Choice";
-  renderChoicePreview();
+  await whileChecking("#choice-go", "Check this month's Choice", async () => {
+    const {report, error} = await fetchReport(
+      "/api/choice-preview", {}, "could not read this month's Choice");
+    choicePreview = report || null;
+    choicePreviewError = error || null;
+    renderChoicePreview();
+  });
 }
 
 function renderChoicePreview() {
