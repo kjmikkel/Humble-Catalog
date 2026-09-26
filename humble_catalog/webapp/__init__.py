@@ -1073,11 +1073,11 @@ def _run_all(servers, slot=None):
                for s in servers]
     for t in threads:
         t.start()
-    request = None
+    handoff_request = None
     try:
         while any(t.is_alive() for t in threads):
-            request = slot.take() if slot is not None else None
-            if request is not None:
+            handoff_request = slot.take() if slot is not None else None
+            if handoff_request is not None:
                 break
             time.sleep(0.5)
     except KeyboardInterrupt:
@@ -1086,7 +1086,7 @@ def _run_all(servers, slot=None):
         for s in servers:
             s.shutdown()
             s.server_close()
-    return request
+    return handoff_request
 
 
 def _bind(wanted, error_cls, hint):
@@ -1124,13 +1124,13 @@ def _serve_loop(wanted, slot, viewer_url, error_cls, hint, servers):
     result and the slot's generation survive the restart.
     """
     while True:
-        request = _run_all(servers, slot)
-        if request is None:
+        handoff_request = _run_all(servers, slot)
+        if handoff_request is None:
             return
         code = None
         try:
-            code = handoff.run_in_terminal(request["command"],
-                                           request["argv"])
+            code = handoff.run_in_terminal(handoff_request["command"],
+                                           handoff_request["argv"])
         except Exception:                     # noqa: BLE001 - see docstring
             traceback.print_exc()
         finally:
