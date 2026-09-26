@@ -526,6 +526,13 @@ workflows' actions, and for Python releases that fall outside a
 requirement in `pyproject.toml`, and opens a PR labelled
 `dependencies` for each group.
 
+A second CI job, `smoke`, builds the wheel, installs it into a fresh
+environment and opens the viewer in a real browser against the demo
+catalog of invented titles (`scripts/smoke_viewer.py`). It fails on any
+console error, failed request, empty Library or section that will not
+open: the failures the unit tests cannot see, because none of them run
+a browser.
+
 **Releases** (`.github/workflows/release.yml`) are cut by pushing a
 tag. Bump `version` in `pyproject.toml` in a PR, merge it, then tag the
 merge commit on `main`:

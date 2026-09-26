@@ -17,14 +17,32 @@ point of keeping the demo data in the repo rather than in a scratch file.
 Serves on port 8099 -- deliberately not 8087, which `serve` uses and
 `stop` targets.
 """
+import importlib.util
 import json
 import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
 
-from humble_catalog import db                          # noqa: E402
+
+def _checkout_on_path():
+    """Serve the checkout only when nothing else provides the package.
+
+    This used to insert the checkout unconditionally, so the demo served
+    the source tree even from a venv holding the installed wheel -- and
+    the viewer smoke test (scripts/smoke_viewer.py, #114), which runs the
+    demo to exercise what a user installs, would have passed on a wheel
+    with no viewer in it (#107). The dev venv's editable install resolves
+    to the checkout anyway, so day-to-day use is unchanged.
+    """
+    if importlib.util.find_spec("humble_catalog") is None:
+        sys.path.insert(0, str(ROOT))
+
+
+_checkout_on_path()
+
+from humble_catalog import db                         # noqa: E402
 from humble_catalog.titles import clean_game_title     # noqa: E402
 from humble_catalog.webapp import create_app           # noqa: E402
 

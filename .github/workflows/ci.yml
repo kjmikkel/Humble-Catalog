@@ -89,3 +89,52 @@ jobs:
       # means something runs locally, where the private data is.
       - name: Privacy check
         run: python scripts/leak_check.py
+
+  # The viewer in a real browser, as a user installs it (#114). The test
+  # job above never reaches a browser -- the JS harness stubs the DOM and
+  # the webapp tests use Flask's test client -- so a script loaded in the
+  # wrong order, a missing asset, or new JS against an old API could all
+  # pass it. Linux only: what this catches does not vary by OS, and the
+  # browser download is the slow part.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Build the wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel
+
+      # Non-editable, into a venv of its own: the code under test is the
+      # wheel's copy, never the checkout's.
+      - name: Install the wheel and a browser
+        run: |
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/python" -m pip install dist/*.whl
+          "$RUNNER_TEMP/smoke/bin/python" -m playwright install --with-deps chromium
+
+      # Run from outside the checkout, and --require-installed refuses to
+      # go on if humble_catalog resolves to the source tree anyway. The
+      # demo catalog is invented data only.
+      - name: Smoke-test the viewer
+        working-directory: ${{ runner.temp }}
+        run: >-
+          "$RUNNER_TEMP/smoke/bin/python"
+          "$GITHUB_WORKSPACE/scripts/smoke_viewer.py"
+          --require-installed
+          --screenshot "$RUNNER_TEMP/smoke-failure.png"
+
+      # What the page looked like when it failed. The demo catalog is all
+      # it can show, so this is safe to publish as an artifact.
+      - name: Keep the failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-failure
+          path: ${{ runner.temp }}/smoke-failure.png
+          if-no-files-found: ignore

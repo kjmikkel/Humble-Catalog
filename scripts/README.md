@@ -15,7 +15,11 @@ committed at all, `check_release.py` is the gate the release workflow
 runs before publishing (see the README's Development section), the
 `capture_*.py` scripts record API fixtures,
 `demo_catalog.py` serves the viewer against a throwaway catalog of
-invented titles, and `make_favicon.py` regenerates the viewer's icon. Its output is committed,
+invented titles, `smoke_viewer.py` opens that demo in headless Chromium
+and fails on any console error, failed request, empty Library or section
+that will not open (CI runs it against the installed wheel; locally,
+`python scripts/smoke_viewer.py` after `python -m playwright install
+chromium`), and `make_favicon.py` regenerates the viewer's icon. Its output is committed,
 so run it only after editing the palette; `favicon_tuner.html` is a
 browser tool for choosing those values (open it directly, it fetches
 nothing).

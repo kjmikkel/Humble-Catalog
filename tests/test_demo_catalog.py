@@ -189,3 +189,27 @@ def test_the_demo_never_lists_the_real_backups(tmp_path):
     repo = Path(__file__).resolve().parent.parent
     assert repo not in backups.parents and backups != repo
     assert app.test_client().get("/api/backups").get_json() == {"backups": []}
+
+
+# -- Which humble_catalog the demo serves (#114) ------------------------
+# The demo used to put the checkout first on sys.path unconditionally, so
+# it served the source tree even from a venv holding the installed wheel.
+# The viewer smoke test runs the demo precisely to exercise what a user
+# installs, and would have passed on a wheel with no viewer in it (#107).
+
+def test_the_checkout_is_added_when_nothing_else_provides_the_package(
+        monkeypatch):
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setattr(demo_catalog.importlib.util, "find_spec",
+                        lambda name: None)
+    demo_catalog._checkout_on_path()
+    assert sys.path[0] == str(demo_catalog.ROOT)
+
+
+def test_an_installed_package_is_left_to_win(monkeypatch):
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    before = list(sys.path)
+    monkeypatch.setattr(demo_catalog.importlib.util, "find_spec",
+                        lambda name: object())
+    demo_catalog._checkout_on_path()
+    assert sys.path == before
