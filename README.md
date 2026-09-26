@@ -539,6 +539,13 @@ both files attached and notes generated from the merged PRs. A pull
 request that changes any of the release files gets the same run as a
 dry run, which publishes nothing. There is no PyPI upload.
 
+**PR labels** (`.github/workflows/pr-labels.yml`): when a pull request
+is opened or its description edited, the labels of the issues it closes
+(`Fixes #N`) are copied onto it. It only adds labels, never removes
+them. It runs for PRs from forks too, which needs a token that can
+write, so it deliberately never checks out or runs anything from the
+PR: it reads the PR's number and talks to GitHub's API, nothing more.
+
 ### Viewing on your phone
 
 `python -m humble_catalog serve --lan` also serves a **read-only** copy of
