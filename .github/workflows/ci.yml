@@ -5,6 +5,18 @@ on:
     branches: [main]
   pull_request:
 
+# A new push to a PR makes its running CI obsolete, so that run is
+# cancelled rather than left to finish (#110). The Windows leg alone takes
+# minutes. Pushes to main are never cancelled: every commit there keeps
+# its own complete run, which is what a later bisect or audit reads.
+#
+# main is grouped by commit, not by branch. A group holds at most one
+# PENDING run even without cancel-in-progress -- a newer one replaces it --
+# so a shared group would still drop the middle run of three quick merges.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     # Windows is the machine this is developed on; Linux is where the

@@ -1,0 +1,32 @@
+# Dependency updates (#110). Weekly: drift measured in #104 was two
+# packages a minor or patch behind, so a faster schedule would only add
+# noise. Each update is a PR like any other and must pass main's required
+# checks before it can merge.
+version: 2
+updates:
+  # The actions every workflow uses (checkout, setup-python, setup-node,
+  # upload/download-artifact). They are version-tagged, so a new major
+  # arrives as a PR here rather than being noticed by chance.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "area: ci"]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # pyproject.toml's requirements are floors (">=") and CI installs the
+  # newest release on every run, so ordinary drift is already exercised by
+  # CI itself. "increase-if-necessary" therefore opens a PR only when a new
+  # release falls OUTSIDE a requirement -- today that means the exact
+  # wordfreq pin -- rather than raising every floor each week.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    versioning-strategy: increase-if-necessary
+    labels: ["dependencies"]
+    groups:
+      python:
+        patterns: ["*"]
