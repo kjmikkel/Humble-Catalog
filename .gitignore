@@ -24,6 +24,10 @@ __pycache__/
 *.pyc
 .venv/
 humble_catalog.egg-info/
+# Package build output: `pip install .` and `pip wheel .` write build/ in
+# the tree, and `python -m build` writes dist/ (#107).
+/build/
+/dist/
 
 # Jeffy transient loop state (session-scoped, never commit)
 .claude/jeffy-loop.local.md

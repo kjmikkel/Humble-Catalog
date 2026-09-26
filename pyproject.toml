@@ -18,7 +18,9 @@ classifiers = [
 dependencies = ["requests>=2.31", "flask>=3.0", "playwright>=1.40", "rapidfuzz>=3.5", "openpyxl>=3.1", "cryptography>=42", "qrcode>=7.4"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "wordfreq==3.1.1"]
+# setuptools: tests/test_packaging.py builds the wheel and sdist with it,
+# offline, so it needs the same floor as [build-system] below.
+dev = ["pytest>=8.0", "wordfreq==3.1.1", "setuptools>=77"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -31,3 +33,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["humble_catalog", "humble_catalog.sources", "humble_catalog.webapp"]
+
+# The viewer's page, scripts, styles and icons. Not Python, so no package
+# listing above brings them: without this every wheel and sdist shipped a
+# viewer with nothing to serve, unnoticed because the editable install
+# serves the checkout's copies (#107). tests/test_packaging.py builds both
+# and checks every file in static/ is inside.
+[tool.setuptools.package-data]
+"humble_catalog.webapp" = ["static/*"]
