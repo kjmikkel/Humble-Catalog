@@ -513,7 +513,8 @@ personal data — and on a clone without those, both report `SKIPPED`
 rather than a misleading "clean".
 
 **CI** (`.github/workflows/ci.yml`) runs the test suite on every push
-and pull request, on Linux and Windows, plus both checks a runner can
+and pull request, on Linux, Windows and macOS with Python 3.12, and on
+Linux with Python 3.13 as well, plus both checks a runner can
 meaningfully make: `check_no_data_tracked.py` is a genuine gate there,
 while `leak_check.py` reports `SKIPPED` for want of a catalog and only
 proves the gate still executes on a fresh clone. The term check that
