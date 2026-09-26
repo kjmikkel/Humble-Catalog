@@ -227,7 +227,38 @@ def test_overlaps_carry_the_item_id_so_the_viewer_can_link_to_the_row(tmp_path):
 
 
 def test_overlaps_are_sorted_by_score_descending(tmp_path):
-    scores = [o["score"] for o in _overlaps(tmp_path)]
+    # Its own fixture: the shared one's overlaps all became series lines,
+    # which left this asserting [] == sorted([]). Three genuine overlaps,
+    # none carrying a volume marker, offered in the order 0.92, 1.00, 0.97
+    # -- neither sorted nor reversed, so dropping the sort fails, and so
+    # does sorting the wrong way.
+    conn = db.connect(tmp_path / "sorted.db")
+    for machine_name, name in (
+            ("widgetservices_examplepress",
+             "Building Widget Services, 2nd Edition"),
+            ("saltsextant_examplepress", "Salt and Sextant"),
+            ("copperalmanac_examplepress", "The Copper Almanac")):
+        conn.execute("INSERT INTO items (machine_name, name, type) "
+                     "VALUES (?, ?, 'ebook')", (machine_name, name))
+    conn.commit()
+    offered = {"saltsextant_amp_examplepress": "Salt & Sextant",
+               "widgetservices_2e_examplepress": "Building Widget Services 2e",
+               "copperalmanacs_examplepress": "The Copper Almanacs"}
+    bundle = {
+        "basic_data": {"human_name": "The World of Examplia by Example Press"},
+        "tier_pricing_data": {"initial": {"price|money": {"amount": 5.0}}},
+        "tier_item_data": {name: {"human_name": title}
+                           for name, title in offered.items()},
+        "tier_display_data": {"initial": {
+            "tier_item_machine_names": list(offered)}},
+    }
+    try:
+        overlaps = bundle_preview.preview(conn, bundle)["overlaps"]
+    finally:
+        conn.close()
+    scores = [o["score"] for o in overlaps]
+    assert len(scores) >= 2, "fixture no longer yields overlaps to sort"
+    assert len(set(scores)) == len(scores)
     assert scores == sorted(scores, reverse=True)
 
 
@@ -240,6 +271,9 @@ def test_an_already_owned_item_is_never_also_an_overlap(tmp_path):
 
 
 def test_unrelated_titles_do_not_become_overlaps(tmp_path):
+    # An empty result is the point here, not an accident: both titles are
+    # sold, unowned and carry no volume marker, so they DO reach _overlaps
+    # -- a threshold loosened to admit everything lists them.
     offered = {o["offered"] for o in _overlaps(tmp_path)}
     assert "Unrelated Book" not in offered
     assert "The Hollow Crypt" not in offered
