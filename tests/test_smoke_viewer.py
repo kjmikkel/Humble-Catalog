@@ -6,7 +6,7 @@ makes that could make it pass for the wrong reason: whether the
 humble_catalog it drives is the installed package or the checkout.
 """
 import importlib.util
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -41,9 +41,34 @@ def test_the_checkout_is_fine_locally(smoke):
     assert smoke.package_problem(CHECKOUT, require_installed=False) is None
 
 
-def test_a_windows_site_packages_counts_as_installed(smoke):
-    path = r"C:\venv\Lib\site-packages\humble_catalog\__init__.py"
+# The decision must not depend on which OS the test runs on. `Path` on
+# Linux and macOS does not split on "\", so a check built on Path.parts
+# passed on Windows and failed on every other runner. Each case runs
+# under both path flavours, so the failure shows on any machine.
+_FLAVOURS = {"posix": PurePosixPath, "windows": PureWindowsPath}
+
+
+@pytest.mark.parametrize("flavour", sorted(_FLAVOURS))
+@pytest.mark.parametrize("path", [
+    r"C:\venv\Lib\site-packages\humble_catalog\__init__.py",
+    "/tmp/smoke/lib/python3.12/site-packages/humble_catalog/__init__.py",
+])
+def test_site_packages_counts_as_installed_on_any_os(smoke, monkeypatch,
+                                                      flavour, path):
+    monkeypatch.setattr(smoke, "Path", _FLAVOURS[flavour])
     assert smoke.package_problem(path, require_installed=True) is None
+
+
+@pytest.mark.parametrize("flavour", sorted(_FLAVOURS))
+@pytest.mark.parametrize("path", [
+    r"C:\src\Humble-Catalog\humble_catalog\__init__.py",
+    "/home/runner/work/Humble-Catalog/humble_catalog/__init__.py",
+    # A folder merely NAMED like it is not an installed package.
+    "/home/me/site-packages-notes/humble_catalog/__init__.py",
+])
+def test_a_checkout_is_refused_on_any_os(smoke, monkeypatch, flavour, path):
+    monkeypatch.setattr(smoke, "Path", _FLAVOURS[flavour])
+    assert smoke.package_problem(path, require_installed=True) is not None
 
 
 def test_it_opens_every_section_the_viewer_has(smoke):

@@ -22,6 +22,7 @@ Needs:  python -m playwright install chromium
 """
 import argparse
 import importlib.util
+import re
 import sys
 import tempfile
 import threading
@@ -38,8 +39,16 @@ ROW = "#catalog tbody tr:not(.table-empty)"
 
 
 def package_problem(module_file, require_installed):
-    """Why this humble_catalog must not be smoke-tested, or None."""
-    if require_installed and "site-packages" not in Path(module_file).parts:
+    """Why this humble_catalog must not be smoke-tested, or None.
+
+    The path is split on both separators, not with Path.parts: on Linux
+    and macOS Path does not split on "\\", so a check built on it read a
+    Windows path as one component and only ever passed on Windows. A
+    whole component must be "site-packages"; a folder merely named like
+    one does not count.
+    """
+    parts = re.split(r"[\\/]+", str(module_file))
+    if require_installed and "site-packages" not in parts:
         return (f"humble_catalog was imported from {module_file}, not from "
                 "an installed package: this run would test the checkout")
     return None
