@@ -1,0 +1,111 @@
+name: Release
+
+# Pushing a v* tag builds the package, checks it, and publishes a GitHub
+# release with the wheel and sdist attached (#112). Nothing is hosted and
+# nothing goes to PyPI: that is decided together with #96.
+#
+# To release: bump `version` in pyproject.toml in a PR, merge it, then tag
+# the merge commit on main: git tag v0.3.0 && git push origin v0.3.0.
+#
+# A pull request that touches the release path runs the same build and
+# checks as a dry run, and publishes nothing, so a broken release job is
+# found in review rather than at the moment of tagging.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/check_release.py
+      - pyproject.toml
+
+# Read-only unless a job says otherwise. Only `publish` writes, and it
+# runs no project code.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The ancestry check below needs main's history, not one commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # A release is published only from main, which is protected and so
+      # has passed CI. A tag pushed on any other commit is refused here.
+      - name: The tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - name: Build
+        run: |
+          python -m pip install build
+          python -m build
+
+      # The tag reaches the shell through the environment, never through an
+      # ${{ }} expression pasted into the script: a ref name may contain
+      # characters the shell would interpret.
+      - name: Check the artifacts
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python scripts/check_release.py --dist dist ${TAG:+--tag "$TAG"}
+
+      # What a user of the release gets: the wheel, installed non-editable
+      # into a fresh venv, run from outside the checkout so nothing is
+      # imported from the source tree, against a throwaway database.
+      - name: The installed wheel serves the viewer
+        run: |
+          python -m venv "$RUNNER_TEMP/smoke"
+          "$RUNNER_TEMP/smoke/bin/python" -m pip install dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/smoke/bin/python" - <<'PY'
+          import os, tempfile
+          import humble_catalog
+          from humble_catalog.webapp import create_app
+          assert "site-packages" in humble_catalog.__file__, humble_catalog.__file__
+          app = create_app(db_path=os.path.join(tempfile.mkdtemp(), "smoke.db"))
+          client = app.test_client()
+          for url in ("/", "/static/app.js", "/static/style.css", "/api/status"):
+              r = client.get(url, headers={"Host": "127.0.0.1"})
+              assert r.status_code == 200, (url, r.status_code)
+              print(url, r.status_code, len(r.data), "bytes")
+          assert b"<title>Humble Catalog</title>" in client.get(
+              "/", headers={"Host": "127.0.0.1"}).data
+          PY
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # No checkout: this job needs only the files `build` checked, and
+      # with write access it should run nothing else.
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: >-
+          gh release create "$TAG" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --verify-tag
+          --generate-notes
+          --title "$TAG"
