@@ -451,7 +451,10 @@ These work together: `import-games` is what gives `bundle`, `choice` and
   base a purchase on against the launcher itself. Titles it cannot
   decide about are counted as neither owned nor new and listed as
   "possible", and a game delivered on a store you have never imported is
-  reported as such rather than quietly counted as new.
+  reported as such rather than quietly counted as new. The viewer's
+  **Bundles** tab runs the same check, and keeps the last five bundles
+  you checked as one-click re-checks, stored only in that browser (never
+  on the LAN viewer) and removable with **Clear**.
 - `python -m humble_catalog choice` - the same question for this
   month's Humble Choice: how many of its games you already own, how many
   would be new, and the one price it all costs. Ownership is counted

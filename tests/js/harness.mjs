@@ -179,6 +179,8 @@ const publish = `
   setKeyRows: (v) => { keyRows = v; },
   previewBundle, renderBundlePreview, money,
   setBundlePreview: (v) => { bundlePreview = v; },
+  RECENT_BUNDLES_KEY, loadRecentBundles, rememberBundle,
+  clearRecentBundles, renderRecentBundles,
   TASK_CARDS, TASK_GROUPS, TAKEOVER_TEXT, renderTasks, startTask, taskMessage,
   setHandoffAvailable: (v) => { handoffAvailable = v; },
   setSetupState: (v) => { setupState = v; },
