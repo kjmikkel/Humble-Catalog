@@ -57,6 +57,21 @@ def check_dependencies():
     raise SystemExit(1)
 
 
+def harden_stdio():
+    """Print what the stream cannot encode as an escape, never raise.
+
+    Progress lines name owned titles, and a terminal run redirected to a
+    file writes with the locale code page: one title with a character
+    cp1252 lacks ended a long job with UnicodeEncodeError (#102). A
+    `\\u0307` in a log is a better outcome than a lost harvest. The
+    viewer's jobs get real UTF-8 instead (jobs.py); this is the backstop
+    for everything else.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
+
+
 def main():
     # The subcommands print in declaration order, so they are declared in
     # the order you would run them: enrich matches against what harvest
@@ -267,6 +282,7 @@ def main():
     # After parsing, so --help still works on a broken environment: it is
     # stdlib-only, and it is how you find the command names to begin with.
     check_dependencies()
+    harden_stdio()
     if args.command == "extract":
         from humble_catalog import extract, humble_api
         try:

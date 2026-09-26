@@ -319,16 +319,30 @@ function patchJobPanel(row, log) {
   if (log.length) applyLog($("#job-log"), log.slice(-200));
 }
 
+// Jobs that change nothing the page draws from the catalog: a backup only
+// adds a snapshot, which the list reload below covers, and check only
+// prints. Every other job can change items, enrichment or keys.
+const LEAVES_CATALOG_ALONE = ["backup", "check"];
+
 // undefined, not null: a catalog with no job history reports last: null,
 // and the first poll must still differ so it loads the list.
 let lastFinished;
 async function pollJobs() {
   const state = await (await fetch("/api/jobs")).json();
   renderJobPanel(state);
-  // A finished job may have been a backup, which adds a snapshot.
   const finished = state.last ? state.last.finished_at : null;
   if (finished !== lastFinished) {
+    // The first poll only learns the history: a job that ended before the
+    // page loaded is already in what boot()'s load() fetched.
+    const firstPoll = lastFinished === undefined;
     lastFinished = finished;
+    // A job that finished while the page watched may have changed the
+    // catalog, which used to stay stale until a manual reload (#100).
+    // Before loadBackups(): load() re-renders the task cards, and with
+    // them the snapshot picker, which would come back empty.
+    if (!firstPoll && finished
+        && !LEAVES_CATALOG_ALONE.includes(state.last.command))
+      await load().catch((err) => console.error("load() failed:", err));
     // Awaited so a test can count the request; still never fatal.
     await loadBackups().catch((err) =>
       console.error("loadBackups() failed:", err));

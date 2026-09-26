@@ -197,6 +197,34 @@ def test_flags_is_the_shared_option_validator():
         jobs.flags("reparse", {}, {"x": True})
 
 
+# -- A job's output is UTF-8 end to end (#102) --------------------------
+# The reader decodes the pipe as UTF-8, but a Python child writing to a
+# pipe on Windows encodes with the locale code page (cp1252) unless told
+# otherwise: a title with a character cp1252 lacks killed the job with
+# UnicodeEncodeError, and one it could encode reached the log as U+FFFD.
+# PYTHONIOENCODING=cp1252 in the test's own environment reproduces that
+# default on every OS, so the test fails on Linux CI too, not only on
+# Windows.
+
+def test_a_child_prints_a_title_outside_cp1252_without_crashing(monkeypatch,
+                                                                tmp_path):
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
+    runner = _fake_runner(monkeypatch, tmp_path, "print('Tit\\u0307le')")
+    runner.start("reparse")
+    runner.wait(timeout=30)
+    assert runner.state()["last"]["state"] == "done"
+    assert runner.state()["log"] == ["Tiṫle"]
+
+
+def test_a_child_s_accented_title_reaches_the_log_intact(monkeypatch,
+                                                        tmp_path):
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
+    runner = _fake_runner(monkeypatch, tmp_path, "print('caf\\u00e9')")
+    runner.start("reparse")
+    runner.wait(timeout=30)
+    assert runner.state()["log"] == ["café"]
+
+
 # -- update runs other commands' steps (#101) ---------------------------
 
 def test_argv_for_update_never_logs_in_and_takes_its_options():

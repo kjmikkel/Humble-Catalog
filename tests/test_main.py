@@ -459,3 +459,21 @@ def test_login_dispatches_to_humble_api_login(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["humble_catalog", "login"])
     main()
     assert called == [True]
+
+
+# -- A progress line can never be what kills a command (#102) -----------
+# A terminal run redirected to a file (`enrich > log.txt`) writes with
+# the locale code page, and one title it cannot encode used to end a
+# long job with UnicodeEncodeError. harden_stdio() makes an unencodable
+# character print as an escape instead.
+def test_harden_stdio_prints_an_unencodable_character_as_an_escape():
+    import os
+    import subprocess
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252"}
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "from humble_catalog.__main__ import harden_stdio; harden_stdio(); "
+         "print('Tit\\u0307le')"],
+        capture_output=True, env=env, timeout=30)
+    assert proc.returncode == 0, proc.stderr.decode(errors="replace")
+    assert proc.stdout.strip() == b"Tit\\u0307le"

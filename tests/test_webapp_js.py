@@ -8,6 +8,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from humble_catalog import export, stats
 from tests.js_harness import eval_js, eval_js_error
 
@@ -3830,3 +3832,141 @@ def test_the_lan_viewer_neither_stores_nor_restores():
     })()""")
     assert result["restored"] is False
     assert result["stored"] == '{"q": "axe"}'   # untouched, neither read nor written
+
+
+# -- A failed check never leaves the previous result up (#88) -----------
+# The response was parsed before anything was drawn, so a reply that was
+# not JSON (a 500 page) or a request that never arrived (the server had
+# stopped) threw before the renderer ran, and the panel went on showing
+# the PREVIOUS bundle under the newly pasted URL.
+_FAILURES = {
+    "non-JSON 500": """() => Promise.resolve({ok: false, status: 500,
+        json: () => Promise.reject(new SyntaxError("Unexpected token <"))})""",
+    "unreachable server": """() => Promise.reject(
+        new TypeError("Failed to fetch"))""",
+}
+
+
+@pytest.mark.parametrize("failure", sorted(_FAILURES))
+def test_a_failed_bundle_check_replaces_the_previous_result(failure):
+    html = eval_js("""(async () => {
+      app.setFetch(() => Promise.resolve(
+        {ok: true, json: () => Promise.resolve(%s)}));
+      await app.previewBundle("https://www.humblebundle.com/books/a");
+      app.setFetch(%s);
+      await app.previewBundle("https://www.humblebundle.com/books/b");
+      return dom.writes["#bundle-panel"];
+    })()""" % (json.dumps(_BUNDLE_REPORT), _FAILURES[failure]))
+    assert _BUNDLE_REPORT["name"] not in html
+    assert "bundle-error" in html
+
+
+@pytest.mark.parametrize("failure", sorted(_FAILURES))
+def test_a_failed_choice_check_replaces_the_previous_result(failure):
+    html = eval_js("""(async () => {
+      app.setFetch(() => Promise.resolve(
+        {ok: true, json: () => Promise.resolve(%s)}));
+      await app.previewChoice();
+      app.setFetch(%s);
+      await app.previewChoice();
+      return dom.writes["#choice-panel"];
+    })()""" % (json.dumps(_CHOICE_REPORT), _FAILURES[failure]))
+    assert _CHOICE_REPORT["name"] not in html
+    assert "bundle-error" in html
+
+
+# -- A check in flight says so, and runs once (#89) ---------------------
+# The button stayed enabled and unchanged until the answer arrived, so a
+# slow Choice check looked dead and a second click sent a second POST.
+_IN_FLIGHT = {
+    "bundle": ("#bundle-go",
+               "previewBundle('https://www.humblebundle.com/books/a')",
+               "Check bundle", _BUNDLE_REPORT),
+    "choice": ("#choice-go", "previewChoice()",
+               "Check this month's Choice", _CHOICE_REPORT),
+}
+
+
+@pytest.mark.parametrize("which", sorted(_IN_FLIGHT))
+def test_a_check_in_flight_disables_its_button_and_runs_once(which):
+    button, call, label, report = _IN_FLIGHT[which]
+    result = eval_js("""(async () => {
+      let calls = 0;
+      const pending = [];
+      const answer = (v) => pending.forEach((r) => r(v));
+      app.setFetch(() => { calls += 1;
+        return new Promise((r) => { pending.push(r); }); });
+      const btn = document.querySelector(%(button)s);
+      const first = app.%(call)s;
+      const second = app.%(call)s;
+      const during = {calls, disabled: btn.disabled,
+                      label: dom.writes[%(button)s + ":text"]};
+      answer({ok: true, json: () => Promise.resolve(%(report)s)});
+      await first; await second;
+      return {during, calls, disabled: btn.disabled,
+              label: dom.writes[%(button)s + ":text"]};
+    })()""" % {"button": json.dumps(button), "call": call,
+               "report": json.dumps(report)})
+    assert result["during"] == {"calls": 1, "disabled": True,
+                                "label": "Checking…"}
+    assert result["calls"] == 1
+    assert result["disabled"] is False
+    assert result["label"] == label
+
+
+def test_a_failed_check_still_re_enables_its_button():
+    disabled = eval_js("""(async () => {
+      app.setFetch(() => Promise.reject(new TypeError("Failed to fetch")));
+      await app.previewBundle("https://www.humblebundle.com/books/a");
+      return document.querySelector("#bundle-go").disabled;
+    })()""")
+    assert disabled is False
+
+
+# -- A finished job refreshes what it changed (#100) --------------------
+# pollJobs noticed a job finishing but reloaded only the snapshot list,
+# so Library, Maintenance and Keys went on showing the catalog from
+# before the fetch or enrich until the page was reloaded by hand.
+def _last_poll_fetches(*lasts):
+    """The URLs the LAST of len(lasts) pollJobs() calls fetched.
+
+    Entry i of `lasts` is what /api/jobs reports as `last` on poll i.
+    """
+    return eval_js("""(async () => {
+      const lasts = %s;
+      let i = 0, seen = [];
+      app.setFetch((url) => { seen.push(url); return Promise.resolve({
+        json: () => Promise.resolve(
+          url === "/api/jobs" ? {running: null, progress: [], log: [],
+                                 last: lasts[i]}
+          : url === "/api/backups" ? {backups: []}
+          : url === "/api/stats" ? {total: 0, sections: []}
+          : url === "/api/duplicates" ? {groups: []}
+          : {items: [], rows: [], libraries: {}})}); });
+      for (i = 0; i < lasts.length; i++) {
+        seen = [];
+        await pollJobs();
+      }
+      return seen;
+    })()""" % json.dumps(list(lasts)))
+
+
+def _finished(command):
+    return {"command": command, "state": "done", "exit_code": 0,
+            "finished_at": "2026-09-26T10:00:00+00:00"}
+
+
+def test_a_job_finishing_while_the_page_watches_reloads_the_catalog():
+    assert "/api/items" in _last_poll_fetches(None, _finished("enrich"))
+
+
+def test_a_finished_backup_reloads_only_the_snapshot_list():
+    seen = _last_poll_fetches(None, _finished("backup"))
+    assert "/api/items" not in seen
+    assert "/api/backups" in seen
+
+
+def test_the_first_poll_does_not_reload_for_a_job_that_ended_earlier():
+    # A job that finished before this page loaded is already in what the
+    # page's own load() fetched; reloading for it again is pure waste.
+    assert "/api/items" not in _last_poll_fetches(_finished("enrich"))
