@@ -79,9 +79,81 @@ async function previewBundle(url) {
     if (report) {
       rememberBundle(url, report.name);
       renderRecentBundles();
+      // The richest tier is the one being decided against; it is first.
+      const top = (report.tiers || [])[0];
+      if (top) headlines.set(url, {owned: top.owned, new: top.new});
+      renderBrowse();
     }
   });
 }
+
+// ---- Browse current bundles (#95) -------------------------------------
+// The live bundles come from Humble's public listing pages: one request
+// for the whole list. Each bundle's owned/new headline needs that
+// bundle's own ~500 KB page, so it is fetched only when the owner clicks
+// Check on its row -- the full report, which then also fills the row --
+// and remembered for the life of the page. Fetching every headline up
+// front would be ~20 requests to Humble per browse, mostly for bundles
+// nobody looks at.
+let liveBundles = null, liveBundlesError = null;
+const headlines = new Map();   // bundle URL -> {owned, new}
+const HUMBLE_PAGE = /^https:\/\/(www\.)?humblebundle\.com\//i;
+
+async function browseBundles() {
+  await whileChecking("#browse-go", "Browse current bundles", async () => {
+    const {report, error} = await fetchReport(
+      "/api/live-bundles", {}, "could not read Humble's current bundles");
+    liveBundles = report ? (report.bundles || []) : null;
+    liveBundlesError = error || null;
+    renderBrowse();
+  });
+}
+
+function renderBrowse() {
+  const panel = $("#browse-panel");
+  if (!panel) return;
+  panel.hidden = !liveBundles && !liveBundlesError;
+  if (panel.hidden) return;
+  if (liveBundlesError) {
+    panel.innerHTML = `<p class="bundle-error">${esc(liveBundlesError)}</p>`;
+    return;
+  }
+  // Second guard on what Humble sent: the server kept only bundle-page
+  // paths, and a row that is not a Humble https page is not offered at all.
+  const shown = liveBundles.filter((b) => HUMBLE_PAGE.test(b.url || ""));
+  if (!shown.length) {
+    panel.innerHTML = "<p>Humble lists no live bundles right now.</p>";
+    return;
+  }
+  const ends = (iso) => {
+    const d = new Date(iso);
+    return isNaN(d) ? "" : d.toLocaleDateString(undefined, {dateStyle: "medium"});
+  };
+  const group = (kind, label) => {
+    const rows = shown.filter((b) => b.kind === kind);
+    if (!rows.length) return "";
+    return `<tr><th colspan="4" scope="colgroup">${label}</th></tr>` + rows.map((b) => {
+      const h = headlines.get(b.url);
+      return `<tr>
+        <td><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer"
+          >${esc(b.name)}</a></td>
+        <td class="browse-ends">${b.ends ? `ends ${esc(ends(b.ends))}` : ""}</td>
+        <td class="browse-headline">${h ? `owned ${h.owned} · new ${h.new}` : ""}</td>
+        <td><button class="browse-check" data-url="${esc(b.url)}"
+          >${h ? "Show" : "Check"}</button></td></tr>`;
+    }).join("");
+  };
+  panel.innerHTML = `<table class="browse-list"><tbody>
+    ${group("books", "Books")}${group("games", "Games")}</tbody></table>`;
+}
+
+$("#browse-go").addEventListener("click", () => browseBundles());
+$("#browse-panel").addEventListener("click", (ev) => {
+  const btn = ev.target.closest && ev.target.closest(".browse-check");
+  if (!btn) return;
+  $("#bundle-url").value = btn.dataset.url;
+  previewBundle(btn.dataset.url);
+});
 
 // ---- Recently checked bundles (#94) -----------------------------------
 // Comparing several live bundles meant re-pasting each URL. The last few

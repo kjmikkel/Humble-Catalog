@@ -455,7 +455,11 @@ These work together: `import-games` is what gives `bundle`, `choice` and
   reported as such rather than quietly counted as new. The viewer's
   **Bundles** tab runs the same check, and keeps the last five bundles
   you checked as one-click re-checks, stored only in that browser (never
-  on the LAN viewer) and removable with **Clear**.
+  on the LAN viewer) and removable with **Clear**. **Browse current
+  bundles** lists the book and game bundles live on Humble right now,
+  with their end dates, from Humble's public listing pages (no login).
+  Each row's **Check** runs the full report and fills in that row's
+  owned/new headline; nothing is fetched for a bundle you don't check.
 - `python -m humble_catalog choice` - the same question for this
   month's Humble Choice: how many of its games you already own, how many
   would be new, and the one price it all costs. Ownership is counted

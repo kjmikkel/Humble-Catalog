@@ -4477,3 +4477,95 @@ def test_an_owned_book_jumps_by_its_rows_name_not_the_offered_one():
     block = _owned_block(_render_bundle(dict(_BUNDLE_REPORT, owned_items=owned)))
     assert re.search(r'data-item="1"\s*>Quiet Harbor \(Reissue\)</button>', block)
     assert "The Quiet Harbor: A Novel ~" in block
+
+
+# -- Browse current bundles (#95) ----------------------------------------
+# The live list is one request; each bundle's owned/new headline is a full
+# report, fetched only when the owner clicks Check on that row, and then
+# remembered for the life of the page.
+
+_LIVE = [
+    {"kind": "books", "name": "Humble Book Bundle: The World of Examplia",
+     "url": "https://www.humblebundle.com/books/the-world-of-examplia-books",
+     "ends": "2026-10-08T18:00:00"},
+    {"kind": "games", "name": "Widget Quest <Collection>",
+     "url": "https://www.humblebundle.com/games/widget-quest-collection",
+     "ends": "2026-10-05T18:00:00"},
+]
+
+
+def _browse(live=None, error=None, then=""):
+    return eval_js("""(async () => {
+      dom.reset();
+      app.resetBrowse();
+      const posted = [];
+      app.setFetch((url, init) => {
+        posted.push(url);
+        if (url === "/api/live-bundles")
+          return Promise.resolve(%s
+            ? {ok: false, status: 502, json: () => Promise.resolve({error: %s})}
+            : {ok: true, json: () => Promise.resolve({bundles: %s})});
+        return Promise.resolve({ok: true, json: () => Promise.resolve(%s)});
+      });
+      await app.browseBundles();
+      %s
+      return {posted, html: dom.writes["#browse-panel"]};
+    })()""" % (json.dumps(bool(error)), json.dumps(error), json.dumps(live or []),
+               json.dumps(_BUNDLE_REPORT), then))
+
+
+def _browse_row(html, url):
+    start = html.rindex("<tr", 0, html.index(f'data-url="{url}"'))
+    return html[start:html.index("</tr>", start)]
+
+
+def test_browse_asks_for_the_live_list_only():
+    result = _browse(_LIVE)
+    assert result["posted"] == ["/api/live-bundles"]
+
+
+def test_browse_lists_each_bundle_with_a_link_and_a_check():
+    html = _browse(_LIVE)["html"]
+    for b in _LIVE:
+        row = _browse_row(html, b["url"])
+        assert f'href="{b["url"]}"' in row and 'target="_blank"' in row
+        assert 'class="browse-check"' in row
+    assert "Humble Book Bundle: The World of Examplia" in html
+
+
+def test_browse_groups_books_before_games():
+    html = _browse(_LIVE)["html"]
+    assert html.index(">Books<") < html.index("Examplia") < html.index(">Games<")
+
+
+def test_browse_escapes_what_humble_sends():
+    html = _browse(_LIVE)["html"]
+    assert "Widget Quest &lt;Collection&gt;" in html and "<Collection>" not in html
+
+
+def test_browse_shows_the_end_date():
+    row = _browse_row(_browse(_LIVE)["html"], _LIVE[0]["url"])
+    assert "2026" in row
+
+
+def test_a_browse_failure_says_why():
+    html = _browse(error="the /books listing carries no bundle list")["html"]
+    assert 'class="bundle-error"' in html and "carries no bundle list" in html
+
+
+def test_checking_a_row_fills_in_its_headline():
+    # _BUNDLE_REPORT's richest tier: 6 items, owned 2, new 4.
+    url = _LIVE[0]["url"]
+    result = _browse(_LIVE, then="""
+      await app.previewBundle(%s);
+      app.renderBrowse();""" % json.dumps(url))
+    assert result["posted"] == ["/api/live-bundles", "/api/bundle-preview"]
+    row = _browse_row(result["html"], url)
+    assert "owned 2" in row and "new 4" in row
+    assert "owned" not in _browse_row(result["html"], _LIVE[1]["url"])
+
+
+def test_a_row_is_only_linked_to_a_humble_page():
+    live = [dict(_LIVE[0], url="javascript:alert(1)")]
+    html = _browse(live)["html"]
+    assert "href=" not in html
