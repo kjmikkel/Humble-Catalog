@@ -3446,3 +3446,68 @@ def test_the_tier_bar_uses_theme_colours():
     for selector in (".bundle-bar-owned", ".bundle-bar-new"):
         rule = _css_rule(css, selector)
         assert "fill: var(--" in rule and "#" not in rule, selector
+
+
+# -- /api/live-bundles (#95) ---------------------------------------------
+
+_LIVE = [{"kind": "books", "name": "Humble Book Bundle: Lantern & Lockpick",
+          "url": "https://www.humblebundle.com/books/lantern-and-lockpick-books",
+          "ends": "2026-10-02T18:00:00"}]
+
+
+def test_live_bundles_route_lists_them(tmp_path, monkeypatch):
+    from humble_catalog import bundle_preview
+    monkeypatch.setattr(bundle_preview, "live_bundles", lambda: _LIVE)
+    resp = _bundle_app(tmp_path).post("/api/live-bundles", json={})
+    assert resp.status_code == 200
+    assert resp.get_json() == {"bundles": _LIVE}
+
+
+def test_live_bundles_route_needs_an_object_before_any_request(tmp_path,
+                                                               monkeypatch):
+    from humble_catalog import bundle_preview
+
+    def explode():
+        raise AssertionError("fetched on a malformed request")
+    monkeypatch.setattr(bundle_preview, "live_bundles", explode)
+    resp = _bundle_app(tmp_path).post("/api/live-bundles", data="[]",
+                                      content_type="application/json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize("exc", [
+    ValueError("the /books listing carries no bundle list"),
+    requests.ConnectionError("unreachable"),
+])
+def test_live_bundles_route_reports_an_upstream_failure(tmp_path, monkeypatch,
+                                                        exc):
+    from humble_catalog import bundle_preview
+
+    def fail():
+        raise exc
+    monkeypatch.setattr(bundle_preview, "live_bundles", fail)
+    resp = _bundle_app(tmp_path).post("/api/live-bundles", json={})
+    assert resp.status_code == 502
+    assert str(exc) in resp.get_json()["error"]
+
+
+def test_live_bundles_route_is_post_only(tmp_path):
+    assert _bundle_app(tmp_path).get("/api/live-bundles").status_code == 405
+
+
+def test_the_lan_viewer_has_no_live_bundles_route(tmp_path):
+    _app, client = _lan_client(tmp_path)
+    _paired(client)
+    assert client.post("/api/live-bundles", json={},
+                       base_url=LAN_BASE).status_code in (403, 404, 405)
+
+
+def test_the_browse_list_scrolls_inside_a_capped_height():
+    # Measured in a real browser: 37 live bundles made the list 1,055 px
+    # tall, and the flex column squashed the bundle report below it to
+    # zero height -- Check filled the headline, and the report was
+    # invisible. The list scrolls on its own now and cannot take the page.
+    rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
+                     "#browse-panel")
+    assert re.search(r"max-height: \d+vh", rule), rule
+    assert "overflow: auto" in rule

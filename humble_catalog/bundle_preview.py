@@ -94,6 +94,76 @@ def fetch_bundle(url, http=None):
     return shapes.as_mapping(blob.get("bundleData"))
 
 
+# The live bundles are listed on Humble's own storefront pages (#95).
+# Measured 2026-09-27: a logged-out GET of /books or /games embeds this
+# block, whose data.<section>.mosaic[].products hold every live bundle --
+# product_url, tile_name, machine_name, end date -- so one request per
+# listing lists them all. The owned/new headline is NOT fetched here: it
+# needs each bundle's own ~500 KB page, so the viewer asks for it one
+# bundle at a time, when the owner clicks Check.
+LISTING_KINDS = ("books", "games")
+_LISTING_BLOB = re.compile(
+    r'<script id="landingPage-json-data" type="application/json">'
+    r'(.*?)</script>', re.S)
+# A bundle page's path, and nothing else: no scheme, no host, no "..".
+# Anything that fails this is dropped rather than made into a link.
+_BUNDLE_PATH = re.compile(r"^/(books|games)/[a-z0-9][a-z0-9-]*$")
+
+
+def _listing_tiles(node):
+    """Every dict carrying a product_url, anywhere under `node`."""
+    if isinstance(node, dict):
+        if "product_url" in node:
+            yield node
+        for value in node.values():
+            yield from _listing_tiles(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _listing_tiles(value)
+
+
+def live_bundles(http=None, kinds=LISTING_KINDS):
+    """[{kind, name, url, ends}] for the bundles live on Humble right now.
+
+    One logged-out GET per listing page, through the same guarded fetch
+    as fetch_bundle, and no cookies: the list is public. The blob is
+    third-party content, so every field is read through `shapes` and a
+    tile whose URL is not a plain /books/ or /games/ path is dropped --
+    the viewer turns these into links and checks. Deduplicated on the
+    URL (a "popular" section repeats tiles), sorted by kind, then the
+    soonest to end.
+
+    Raises ValueError when a listing no longer carries the block, which
+    would mean the page changed shape; network errors propagate.
+    """
+    found = {}
+    for kind in kinds:
+        page = url_import._read_capped(
+            url_import._fetch_html(f"https://www.{HOST}/{kind}", http),
+            limit=MAX_PAGE_BYTES)
+        match = _LISTING_BLOB.search(page)
+        if not match:
+            raise ValueError(f"the /{kind} listing carries no bundle list -- "
+                             "Humble may have changed the page")
+        try:
+            blob = json.loads(match.group(1))
+        except ValueError:
+            blob = None
+        for tile in _listing_tiles(blob):
+            path = shapes.as_text(tile.get("product_url")) or ""
+            if not _BUNDLE_PATH.match(path) or path in found:
+                continue
+            found[path] = {
+                "kind": path.split("/")[1],
+                "name": (shapes.as_text(tile.get("tile_name"))
+                         or shapes.as_text(tile.get("machine_name")) or path),
+                "url": f"https://www.{HOST}{path}",
+                "ends": shapes.as_text(tile.get("end_date|datetime")) or "",
+            }
+    return sorted(found.values(),
+                  key=lambda b: (b["kind"], b["ends"] or "~", b["name"].lower()))
+
+
 def _owned(conn):
     """{machine_name: item_id} for every machine_name the catalog accounts for.
 

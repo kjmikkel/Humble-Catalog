@@ -1202,3 +1202,56 @@ def test_format_report_names_the_row_when_it_is_spelled_differently(tmp_path):
     finally:
         conn.close()
     assert "The Quiet Harbor: A Novel  ~  Quiet Harbor (Reissue)" in out
+
+
+# -- The live bundles, from Humble's own listing pages (#95) --------------
+# Measured 2026-09-27: a logged-out GET of /books (and /games) embeds a
+# landingPage-json-data block whose data.<section>.mosaic[].products hold
+# every live bundle: product_url, tile_name, machine_name, end date. One
+# request per listing. The fixture is invented and shaped like it, with a
+# software tile, a duplicate, and entries that must never become a link.
+
+def _listing():
+    return (FIXTURES / "listing_page.html").read_text(encoding="utf-8")
+
+
+def test_live_bundles_lists_the_books_and_games_on_the_listing():
+    live = bundle_preview.live_bundles(http=_http(_listing()))
+    assert [(b["kind"], b["name"]) for b in live] == [
+        ("books", "Humble Book Bundle: Lantern & Lockpick"),
+        ("books", "Humble Book Bundle: The World of Examplia"),
+        ("games", "Widget Quest Collection"),
+    ]
+
+
+def test_live_bundles_carry_an_absolute_humble_url_and_end_date():
+    b = bundle_preview.live_bundles(http=_http(_listing()))[0]
+    assert b["url"] == "https://www.humblebundle.com/books/lantern-and-lockpick-books"
+    assert b["ends"] == "2026-10-02T18:00:00"
+
+
+def test_live_bundles_never_link_anywhere_but_a_humble_bundle_page():
+    urls = [b["url"] for b in bundle_preview.live_bundles(http=_http(_listing()))]
+    assert all(u.startswith("https://www.humblebundle.com/books/")
+               or u.startswith("https://www.humblebundle.com/games/") for u in urls)
+    assert not any(".." in u or "example.test" in u or "software" in u
+                   for u in urls)
+
+
+def test_live_bundles_fetch_only_the_two_listing_pages():
+    http = _http(_listing())
+    bundle_preview.live_bundles(http=http)
+    asked = [c.args[1] for c in http.request.call_args_list]
+    assert asked == ["https://www.humblebundle.com/books",
+                     "https://www.humblebundle.com/games"]
+
+
+def test_a_listing_without_its_data_block_says_so():
+    with pytest.raises(ValueError, match="listing"):
+        bundle_preview.live_bundles(http=_http("<html><body>shell</body></html>"))
+
+
+def test_a_listing_whose_data_is_not_the_expected_shape_lists_nothing():
+    page = ('<script id="landingPage-json-data" type="application/json">'
+            '["not", "an", "object"]</script>')
+    assert bundle_preview.live_bundles(http=_http(page)) == []

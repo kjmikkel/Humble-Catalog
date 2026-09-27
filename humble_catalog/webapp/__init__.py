@@ -678,6 +678,24 @@ def _register_write_routes(app):
             return jsonify({"error": str(exc)}), 502
         return jsonify(bundle_preview.preview(conn(), bundle, url=url))
 
+    @app.post("/api/live-bundles")
+    def live_bundles_route():
+        # The bundles live on Humble now, from its public listing pages
+        # (#95): two logged-out requests, no cookies. POST like the other
+        # network actions, and an object is required before any request,
+        # for the reason /api/choice-preview gives. Each bundle's owned/new
+        # headline is NOT fetched here -- that is a full report per bundle,
+        # which the page asks /api/bundle-preview for one at a time.
+        if _json_object_or_none() is None:
+            return jsonify({"error": "JSON object required"}), 400
+        try:
+            live = bundle_preview.live_bundles()
+        except (ValueError, requests.RequestException) as exc:
+            # Both are upstream: the listing is unreachable, or no longer
+            # carries the list. Neither is anything this request got wrong.
+            return jsonify({"error": str(exc)}), 502
+        return jsonify({"bundles": live})
+
     @app.post("/api/choice-preview")
     def choice_preview_route():
         # Reads no field: Choice is always "this month". POST rather than
