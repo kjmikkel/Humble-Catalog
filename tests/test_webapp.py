@@ -3511,3 +3511,34 @@ def test_the_browse_list_scrolls_inside_a_capped_height():
                      "#browse-panel")
     assert re.search(r"max-height: \d+vh", rule), rule
     assert "overflow: auto" in rule
+
+
+# -- More air in Bundles, and striped Browse rows (#133) ------------------
+
+def _style():
+    return (_STATIC / "style.css").read_text(encoding="utf-8")
+
+
+def _rem(rule, prop):
+    m = re.search(prop + r":\s*([\d.]+)rem", rule)
+    return float(m.group(1)) if m else 0.0
+
+
+def test_each_card_spaces_its_parts_apart():
+    rule = _css_rule(_style(), ".bundle-action")
+    assert "flex-direction: column" in rule
+    assert _rem(rule, "gap") >= 0.75, rule
+    assert _rem(rule, "padding") >= 0.9, rule
+
+
+def test_browse_rows_have_room_and_alternate():
+    css = _style()
+    assert _rem(_css_rule(css, ".browse-list td"), "padding") >= 0.4
+    stripe = _css_rule(css, ".browse-list tbody tr:nth-child(even)")
+    # The Library table's stripe, so both themes follow.
+    assert "var(--surface-alt)" in stripe and "#" not in stripe
+
+
+def test_the_kind_switch_uses_theme_colours():
+    rule = _css_rule(_style(), '.browse-kind[aria-pressed="true"]')
+    assert "var(--" in rule and "#" not in rule

@@ -96,6 +96,17 @@ async function previewBundle(url) {
 // front would be ~20 requests to Humble per browse, mostly for bundles
 // nobody looks at.
 let liveBundles = null, liveBundlesError = null;
+// Which kind the list shows (#134). Grouped Books-then-Games inside the
+// 40vh scroll box, every game bundle sat below its bottom edge and the
+// list read as books-only; a switch names both kinds, with their counts,
+// and shows one at a time. Kept across redraws -- a Check redraws.
+const BROWSE_KINDS = [["books", "Books", "book"], ["games", "Games", "game"]];
+let browseKind = "books";
+
+function selectBrowseKind(kind) {
+  if (BROWSE_KINDS.some(([k]) => k === kind)) browseKind = kind;
+  renderBrowse();
+}
 const headlines = new Map();   // bundle URL -> {owned, new}
 const HUMBLE_PAGE = /^https:\/\/(www\.)?humblebundle\.com\//i;
 
@@ -129,10 +140,17 @@ function renderBrowse() {
     const d = new Date(iso);
     return isNaN(d) ? "" : d.toLocaleDateString(undefined, {dateStyle: "medium"});
   };
-  const group = (kind, label) => {
+  const switcher = `<div class="browse-kinds" role="group" aria-label="Kind of bundle">${
+    BROWSE_KINDS.map(([kind, label]) => `<button class="browse-kind"
+      data-kind="${kind}" aria-pressed="${kind === browseKind}"
+      >${label} (${shown.filter((b) => b.kind === kind).length})</button>`).join("")}</div>`;
+  const rowsFor = (kind) => {
     const rows = shown.filter((b) => b.kind === kind);
-    if (!rows.length) return "";
-    return `<tr><th colspan="4" scope="colgroup">${label}</th></tr>` + rows.map((b) => {
+    if (!rows.length) {
+      const noun = BROWSE_KINDS.find(([k]) => k === kind)[2];
+      return `<p>Humble lists no live ${noun} bundles right now.</p>`;
+    }
+    return `<table class="browse-list"><tbody>` + rows.map((b) => {
       const h = headlines.get(b.url);
       return `<tr>
         <td><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer"
@@ -141,14 +159,18 @@ function renderBrowse() {
         <td class="browse-headline">${h ? `owned ${h.owned} · new ${h.new}` : ""}</td>
         <td><button class="browse-check" data-url="${esc(b.url)}"
           >${h ? "Show" : "Check"}</button></td></tr>`;
-    }).join("");
+    }).join("") + `</tbody></table>`;
   };
-  panel.innerHTML = `<table class="browse-list"><tbody>
-    ${group("books", "Books")}${group("games", "Games")}</tbody></table>`;
+  panel.innerHTML = switcher + rowsFor(browseKind);
 }
 
 $("#browse-go").addEventListener("click", () => browseBundles());
 $("#browse-panel").addEventListener("click", (ev) => {
+  const kind = ev.target.closest && ev.target.closest(".browse-kind");
+  if (kind) {
+    selectBrowseKind(kind.dataset.kind);
+    return;
+  }
   const btn = ev.target.closest && ev.target.closest(".browse-check");
   if (!btn) return;
   $("#bundle-url").value = btn.dataset.url;

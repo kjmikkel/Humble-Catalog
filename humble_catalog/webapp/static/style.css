@@ -483,28 +483,43 @@ a { color: var(--accent); }
 #bundle-empty { max-width: 70ch; margin: 0; }
 .bundle-actions { display: flex; flex-wrap: wrap; gap: .75rem;
                   align-items: stretch; }
-.bundle-action { background: var(--surface); border: 1px solid var(--border);
+/* Each card is a column with a real gap between its parts (#133): heading,
+   URL row, recent list and Browse button sat tight against each other. */
+.bundle-action { display: flex; flex-direction: column; gap: .75rem;
+                 padding: 1rem 1.1rem;
+                 background: var(--surface); border: 1px solid var(--border);
                  border-radius: 6px; padding: .6rem .8rem; }
-.bundle-action h3 { margin: 0 0 .4rem; font-size: 1rem; }
-.bundle-action p { margin: 0 0 .4rem; color: var(--muted); }
+.bundle-action h3 { margin: 0; font-size: 1rem; }
+.bundle-action p { margin: 0; color: var(--muted); }
+.bundle-action > button { align-self: flex-start; }
 #bundle-form { flex: 0 1 36rem; }
 .bundle-url-row { display: flex; gap: .5rem; }
 #bundle-url { flex: 1 1 auto; min-width: 0; }
 /* Browse current bundles (#95): the live list, one row per bundle. */
-.browse-go { margin-top: .5rem; }
+.browse-go { margin: 0; }
 /* Capped, scrolling inside itself. Uncapped, 37 live bundles made the
    list 1,055 px tall and the flex column squashed the bundle report
    below it to zero height: Check filled the row and showed nothing. */
 #browse-panel { flex: 0 0 auto; max-height: 40vh; overflow: auto; }
 .browse-list { width: auto; border-collapse: collapse; }
-.browse-list th { text-align: left; padding: .5rem 0 .2rem; color: var(--muted); }
-.browse-list td { padding: .15rem .8rem .15rem 0; }
+/* Taller rows, striped like the Library table (#133), so each Check
+   reads as belonging to the bundle on its own line. */
+.browse-list td { padding: .45rem .8rem; }
+.browse-list tbody tr:nth-child(even) { background: var(--surface-alt); }
+/* The Books | Games switch (#134): both kinds named, with their counts. */
+.browse-kinds { display: inline-flex; margin: 0 0 .5rem;
+                border: 1px solid var(--border-strong); border-radius: 6px;
+                overflow: hidden; }
+.browse-kind { border: 0; border-radius: 0; padding: .35rem .9rem;
+               background: var(--surface); color: var(--fg); }
+.browse-kind[aria-pressed="true"] { background: var(--accent); color: var(--surface);
+                                    font-weight: 600; }
 .browse-ends, .browse-headline { color: var(--muted); font-size: .9em;
                                  white-space: nowrap; }
 /* The last few checks under the URL box (#94). */
-#bundle-recent { margin-top: .5rem; font-size: .9em; }
+#bundle-recent { margin: 0; font-size: .9em; }
 #bundle-recent ul { list-style: none; margin: .2rem 0; padding: 0; }
-#bundle-recent li { margin: .15rem 0; }
+#bundle-recent li { margin: .35rem 0; }
 .bundle-recent-label { color: var(--muted); }
 #bundle-panel { margin-bottom: .75rem; }
 /* Compact, not page-wide: stretched, the three counts sat ~600 px apart
