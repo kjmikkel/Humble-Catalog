@@ -3884,8 +3884,7 @@ _IN_FLIGHT = {
     "bundle": ("#bundle-go",
                "previewBundle('https://www.humblebundle.com/books/a')",
                "Check bundle", _BUNDLE_REPORT),
-    "choice": ("#choice-go", "previewChoice()",
-               "Check this month's Choice", _CHOICE_REPORT),
+    "choice": ("#choice-go", "previewChoice()", "Check", _CHOICE_REPORT),
 }
 
 
@@ -4604,3 +4603,99 @@ def test_a_row_is_only_linked_to_a_humble_page():
     live = [dict(_LIVE[0], url="javascript:alert(1)")]
     html = _browse(live)["html"]
     assert "href=" not in html
+
+
+
+# -- The two-pane Bundles page (#136) -------------------------------------
+
+def test_one_report_shows_at_a_time():
+    # The right pane holds the latest check, whichever kind it was.
+    got = eval_js("""(async () => {
+      dom.reset();
+      app.setFetch((url) => Promise.resolve({ok: true, json: () => Promise.resolve(
+        url === "/api/choice-preview" ? %s : %s)}));
+      const state = () => [document.querySelector("#bundle-panel").hidden,
+                           document.querySelector("#choice-panel").hidden];
+      await app.previewBundle("https://www.humblebundle.com/books/a");
+      const afterBundle = state();
+      await app.previewChoice();
+      const afterChoice = state();
+      await app.previewBundle("https://www.humblebundle.com/books/a");
+      return {afterBundle, afterChoice, again: state()};
+    })()""" % (json.dumps(_CHOICE_REPORT), json.dumps(_BUNDLE_REPORT)))
+    assert got["afterBundle"] == [False, True]
+    assert got["afterChoice"] == [True, False]
+    assert got["again"] == [False, True]
+
+
+def test_the_row_being_shown_is_marked():
+    url = _LIVE[0]["url"]
+    html = _browse(_LIVE, then="""
+      await app.previewBundle(%s);
+      app.renderBrowse();""" % json.dumps(url))["html"]
+    assert 'aria-current="true"' in _browse_row(html, url)
+    assert html.count('aria-current="true"') == 1
+
+
+def test_each_report_offers_a_way_back_to_the_list():
+    # Stacked on a phone, the report follows the list; after a Check the
+    # page moves down to it, and this is the way back up.
+    assert 'class="report-back"' in _render_bundle(_BUNDLE_REPORT)
+    assert 'class="report-back"' in _render_choice(_CHOICE_REPORT)
+
+
+# -- "Load when the tab opens" (#136) ------------------------------------
+# Browse stays a button; the checkbox makes opening the Bundles tab load
+# the list too, once per page -- the list is kept, not refetched. Its
+# state is remembered across sessions, and never on the LAN viewer.
+
+def _auto(body, stored=None, read_only=False):
+    return eval_js("""(async () => {
+      dom.reset();
+      app.resetBrowse();
+      localStorage.removeItem("hc-browse-auto");
+      if (%s !== null) localStorage.setItem("hc-browse-auto", %s);
+      app.setReadOnly(%s);
+      const posted = [];
+      app.setFetch((url) => { posted.push(url); return Promise.resolve(
+        {ok: true, json: () => Promise.resolve({bundles: %s})}); });
+      try { const r = await (%s); return {posted, r}; }
+      finally { app.setReadOnly(false); }
+    })()""" % (json.dumps(stored), json.dumps(stored), json.dumps(read_only),
+               json.dumps(_LIVE), body))
+
+
+def test_ticking_the_box_is_remembered():
+    got = _auto("""(async () => { app.setBrowseAuto(true);
+      const on = localStorage.getItem("hc-browse-auto");
+      app.setBrowseAuto(false);
+      return [on, localStorage.getItem("hc-browse-auto")]; })()""")
+    assert got["r"] == ["1", None]
+
+
+def test_opening_the_tab_loads_the_list_when_ticked_and_only_once():
+    got = _auto("""(async () => { await app.onBundlesShown();
+      await app.onBundlesShown(); })()""", stored="1")
+    assert got["posted"] == ["/api/live-bundles"]
+
+
+def test_opening_the_tab_loads_nothing_when_unticked():
+    assert _auto("(async () => { await app.onBundlesShown(); })()")["posted"] == []
+
+
+def test_the_lan_viewer_never_auto_loads():
+    got = _auto("(async () => { await app.onBundlesShown(); })()",
+                stored="1", read_only=True)
+    assert got["posted"] == []
+
+
+def test_a_blocked_store_leaves_the_box_unticked_and_quiet():
+    got = eval_js("""(async () => {
+      const real = globalThis.localStorage;
+      globalThis.localStorage = {getItem() { throw new Error("blocked"); },
+                                 setItem() { throw new Error("blocked"); },
+                                 removeItem() { throw new Error("blocked"); }};
+      try { app.setBrowseAuto(true); return app.browseAutoOn(); }
+      finally { globalThis.localStorage = real; }
+    })()""")
+    assert got is False

@@ -182,6 +182,7 @@ const publish = `
   RECENT_BUNDLES_KEY, loadRecentBundles, rememberBundle,
   browseBundles, renderBrowse,
   selectBrowseKind,
+  setBrowseAuto, browseAutoOn, onBundlesShown,
   resetBrowse: () => { liveBundles = null; liveBundlesError = null; headlines.clear(); browseKind = "books"; },
   clearRecentBundles, renderRecentBundles,
   TASK_CARDS, TASK_GROUPS, TAKEOVER_TEXT, renderTasks, startTask, taskMessage,

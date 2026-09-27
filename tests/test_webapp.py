@@ -3385,38 +3385,68 @@ def _bundles_section():
     return html[start:html.index("</section>", start)]
 
 
-def test_both_actions_come_before_both_results():
+# #136 replaced #90's side-by-side cards: the report ended up at the bottom
+# of a single column. Now finding is on the left and the report on the
+# right, each column scrolling on its own (chosen from three mockups: A,
+# Choice as a compact entry in the left column).
+
+def _between(section, start_marker, end_marker):
+    return section[section.index(start_marker):section.index(end_marker)]
+
+
+def test_finding_is_on_the_left_and_the_report_on_the_right():
     section = _bundles_section()
-    actions = section.index('class="bundle-actions"')
-    for form in ('id="bundle-form"', 'id="choice-form"'):
-        assert actions < section.index(form)
-    last_form = max(section.index('id="bundle-form"'),
-                    section.index('id="choice-form"'))
-    for panel in ('id="bundle-panel"', 'id="choice-panel"'):
-        assert section.index(panel) > last_form, panel
+    find = section.index('class="bundles-find"')
+    report = section.index('class="bundles-report"')
+    assert find < report
+    left = section[find:report]
+    for el in ('id="bundle-form"', 'id="choice-form"', 'id="browse-panel"'):
+        assert el in left, el
+    right = section[report:]
+    for el in ('id="bundle-empty"', 'id="bundle-panel"', 'id="choice-panel"'):
+        assert el in right, el
 
 
 def test_each_action_is_labelled():
     section = _bundles_section()
-    bundle = section[section.index('id="bundle-form"'):
-                     section.index('id="choice-form"')]
-    choice = section[section.index('id="choice-form"'):
-                     section.index('id="bundle-panel"')]
+    bundle = _between(section, 'id="bundle-form"', 'id="choice-form"')
+    choice = _between(section, 'id="choice-form"', 'id="browse-panel"')
     assert "<h3>A bundle</h3>" in bundle
-    assert "<h3>This month's Choice</h3>" in choice
-    assert "No URL needed" in choice
+    assert "This month's Choice" in choice and "No URL needed" in choice
 
 
-def test_the_actions_sit_side_by_side_and_stack_when_narrow():
+def test_the_section_is_two_columns_that_stack_when_narrow():
+    css = (_STATIC / "style.css").read_text(encoding="utf-8")
+    rule = _css_rule(css, "#section-bundles")
+    assert "display: grid" in rule
+    assert re.search(r"grid-template-columns: \d+(\.\d+)?rem minmax\(0, 1fr\)", rule), rule
+    # The block that styles this section: the Library has its own 900px one.
+    blocks = css.split("@media (max-width: 900px)")[1:]
+    narrow = next(b for b in blocks if "#section-bundles {" in b.split("\n}")[0])
+    assert "display: block" in _css_rule(narrow, "#section-bundles")
+
+
+def test_a_hidden_bundles_section_stays_hidden():
+    # An id selector setting display outranks section[id^="section-"][hidden],
+    # which would paint Bundles on every tab. The guard has to be explicit.
     rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
-                     ".bundle-actions")
-    assert "display: flex" in rule and "flex-wrap: wrap" in rule
+                     "#section-bundles[hidden]")
+    assert "display: none" in rule
 
 
-def test_the_url_card_is_capped_not_window_wide():
-    rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
-                     "#bundle-form")
-    assert re.search(r"flex: 0 1 \d+(\.\d+)?rem", rule), rule
+def test_each_column_scrolls_on_its_own():
+    css = (_STATIC / "style.css").read_text(encoding="utf-8")
+    for col in (".bundles-find", ".bundles-report"):
+        assert "overflow: auto" in _css_rule(css, col), col
+    # The list's own 40vh cap (#95) was a workaround for the single column.
+    assert "max-height" not in _css_rule(css, "#browse-panel")
+
+
+def test_the_url_card_keeps_its_own_height_in_a_column():
+    # #90's `flex: 0 1 36rem` was a width in a row; in a column it became a
+    # 36rem-tall card with nothing in its bottom half.
+    assert "flex: none" in _css_rule(
+        (_STATIC / "style.css").read_text(encoding="utf-8"), "#bundle-form")
 
 
 def test_the_introduction_wraps_at_a_readable_width():
@@ -3502,17 +3532,6 @@ def test_the_lan_viewer_has_no_live_bundles_route(tmp_path):
                        base_url=LAN_BASE).status_code in (403, 404, 405)
 
 
-def test_the_browse_list_scrolls_inside_a_capped_height():
-    # Measured in a real browser: 37 live bundles made the list 1,055 px
-    # tall, and the flex column squashed the bundle report below it to
-    # zero height -- Check filled the headline, and the report was
-    # invisible. The list scrolls on its own now and cannot take the page.
-    rule = _css_rule((_STATIC / "style.css").read_text(encoding="utf-8"),
-                     "#browse-panel")
-    assert re.search(r"max-height: \d+vh", rule), rule
-    assert "overflow: auto" in rule
-
-
 # -- More air in Bundles, and striped Browse rows (#133) ------------------
 
 def _style():
@@ -3533,7 +3552,8 @@ def test_each_card_spaces_its_parts_apart():
 
 def test_browse_rows_have_room_and_alternate():
     css = _style()
-    assert _rem(_css_rule(css, ".browse-list td"), "padding") >= 0.4
+    # On the row since #136 made each row a two-line grid.
+    assert _rem(_css_rule(css, ".browse-list tr"), "padding") >= 0.4
     stripe = _css_rule(css, ".browse-list tbody tr:nth-child(even)")
     # The Library table's stripe, so both themes follow.
     assert "var(--surface-alt)" in stripe and "#" not in stripe

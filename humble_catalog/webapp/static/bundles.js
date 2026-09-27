@@ -75,6 +75,14 @@ async function previewBundle(url) {
     bundlePreview = report || null;
     bundlePreviewError = error || null;
     renderBundlePreview();
+    // One report at a time on the right (#136): the latest check wins.
+    if (report || error) {
+      shownBundleUrl = report ? url : null;
+      choicePreview = null;
+      choicePreviewError = null;
+      renderChoicePreview();
+      showReport("#bundle-panel");
+    }
     // Only a check that worked is worth one click to repeat.
     if (report) {
       rememberBundle(url, report.name);
@@ -96,6 +104,20 @@ async function previewBundle(url) {
 // front would be ~20 requests to Humble per browse, mostly for bundles
 // nobody looks at.
 let liveBundles = null, liveBundlesError = null;
+// The bundle whose report is on the right, so its row can say so (#136).
+let shownBundleUrl = null;
+// On a phone the panes stack, list first; this leads back up from a report.
+const REPORT_BACK = '<button class="report-back" type="button">Back to the list</button>';
+const NARROW_BUNDLES = "(max-width: 900px)";
+
+// Stacked, the report is below the list, so a Check would otherwise answer
+// somewhere off screen. Side by side it is already in view.
+function showReport(selector) {
+  const el = $(selector);
+  if (el && el.scrollIntoView && typeof matchMedia === "function"
+      && matchMedia(NARROW_BUNDLES).matches)
+    el.scrollIntoView({block: "start"});
+}
 // Which kind the list shows (#134). Grouped Books-then-Games inside the
 // 40vh scroll box, every game bundle sat below its bottom edge and the
 // list read as books-only; a switch names both kinds, with their counts,
@@ -152,7 +174,8 @@ function renderBrowse() {
     }
     return `<table class="browse-list"><tbody>` + rows.map((b) => {
       const h = headlines.get(b.url);
-      return `<tr>
+      const shown = b.url === shownBundleUrl;
+      return `<tr${shown ? ' class="browse-current" aria-current="true"' : ""}>
         <td><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer"
           >${esc(b.name)}</a></td>
         <td class="browse-ends">${b.ends ? `ends ${esc(ends(b.ends))}` : ""}</td>
@@ -166,6 +189,7 @@ function renderBrowse() {
 
 $("#browse-go").addEventListener("click", () => browseBundles());
 $("#browse-panel").addEventListener("click", (ev) => {
+  if (ev.target.closest && ev.target.closest(".report-back")) return;
   const kind = ev.target.closest && ev.target.closest(".browse-kind");
   if (kind) {
     selectBrowseKind(kind.dataset.kind);
@@ -175,6 +199,61 @@ $("#browse-panel").addEventListener("click", (ev) => {
   if (!btn) return;
   $("#bundle-url").value = btn.dataset.url;
   previewBundle(btn.dataset.url);
+});
+
+// ---- Load when the tab opens (#136) -----------------------------------
+// Browse stays a button. Ticked, opening the Bundles tab loads the list
+// too -- once per page: the list is kept, not refetched, so switching tabs
+// costs Humble nothing. Remembered across sessions, and guarded like the
+// recent list (#94): blocked storage means unticked, never an error. Not
+// on the LAN viewer, which has no Bundles section to open.
+const BROWSE_AUTO_KEY = "hc-browse-auto";
+
+function browseAutoOn() {
+  if (READ_ONLY) return false;
+  try {
+    return localStorage.getItem(BROWSE_AUTO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setBrowseAuto(on) {
+  if (READ_ONLY) return;
+  try {
+    if (on) localStorage.setItem(BROWSE_AUTO_KEY, "1");
+    else localStorage.removeItem(BROWSE_AUTO_KEY);
+  } catch {
+    // Blocked storage: the box simply is not remembered.
+  }
+}
+
+async function onBundlesShown() {
+  const box = $("#browse-auto");
+  if (box) box.checked = browseAutoOn();
+  if (browseAutoOn() && !liveBundles) await browseBundles();
+}
+
+$("#browse-auto").addEventListener("change", (ev) => {
+  setBrowseAuto(ev.target.checked);
+  if (ev.target.checked && !liveBundles) browseBundles();
+});
+// shell.js, which owns routing, loads after this file; the hash is read
+// directly rather than through currentSection().
+const onBundlesTab = () =>
+  (typeof location !== "undefined" && location.hash || "") === "#/bundles";
+if (typeof addEventListener === "function")
+  addEventListener("hashchange", () => { if (onBundlesTab()) onBundlesShown(); });
+if (onBundlesTab()) onBundlesShown();
+else {
+  const box = $("#browse-auto");
+  if (box) box.checked = browseAutoOn();
+}
+$("#section-bundles").addEventListener("click", (ev) => {
+  if (ev.target.closest && ev.target.closest(".report-back")) {
+    const find = $(".bundles-find");
+    if (find && find.scrollIntoView) find.scrollIntoView({block: "start"});
+  }
 });
 
 // ---- Recently checked bundles (#94) -----------------------------------
@@ -407,7 +486,7 @@ function renderBundlePreview() {
     ? `<a href="${esc(pageUrl)}" target="_blank" rel="noopener noreferrer"
         >${esc(bundlePreview.name)}</a>`
     : esc(bundlePreview.name);
-  panel.innerHTML = `<details${bundlePreviewOpen ? " open" : ""}>
+  panel.innerHTML = `${REPORT_BACK}<details${bundlePreviewOpen ? " open" : ""}>
     <summary>${name}</summary>
     <table class="bundle-tiers">${head}<tbody>${rows}</tbody></table>
     ${lists}${owned}${keyed}${series}${overlaps}</details>`;
@@ -450,12 +529,19 @@ let choicePreview = null, choicePreviewError = null;
 let choicePreviewOpen = true;
 
 async function previewChoice() {
-  await whileChecking("#choice-go", "Check this month's Choice", async () => {
+  await whileChecking("#choice-go", "Check", async () => {
     const {report, error} = await fetchReport(
       "/api/choice-preview", {}, "could not read this month's Choice");
     choicePreview = report || null;
     choicePreviewError = error || null;
+    // One report at a time (#136): the Choice replaces a bundle report.
+    bundlePreview = null;
+    bundlePreviewError = null;
+    shownBundleUrl = null;
+    renderBundlePreview();
+    renderBrowse();
     renderChoicePreview();
+    showReport("#choice-panel");
   });
 }
 
@@ -508,7 +594,7 @@ function renderChoicePreview() {
     <p class="bundle-error">WARNING: this month delivers on ${esc(s)}, which
     has never been imported — its unmatched games are counted as new by
     default.</p>`).join("");
-  panel.innerHTML = `<details${choicePreviewOpen ? " open" : ""}>
+  panel.innerHTML = `${REPORT_BACK}<details${choicePreviewOpen ? " open" : ""}>
     <summary>${esc(c.name)}</summary>
     ${counts}
     ${c.claimed ? "<p>You have already made your picks for this month.</p>" : ""}

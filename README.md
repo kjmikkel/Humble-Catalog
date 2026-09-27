@@ -461,6 +461,9 @@ These work together: `import-games` is what gives `bundle`, `choice` and
   dates, from Humble's public listing pages (no login).
   Each row's **Check** runs the full report and fills in that row's
   owned/new headline; nothing is fetched for a bundle you don't check.
+  Tick **Load when the tab opens** to have the list load by itself each
+  time you open Bundles (once per page, and remembered). The report shows
+  beside the list on a wide window, and below it on a phone.
 - `python -m humble_catalog choice` - the same question for this
   month's Humble Choice: how many of its games you already own, how many
   would be new, and the one price it all costs. Ownership is counted
