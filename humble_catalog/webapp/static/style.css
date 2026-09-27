@@ -480,9 +480,38 @@ a { color: var(--accent); }
    URL card is capped: uncapped, its box ran the width of the window with
    the button stranded at the far edge. They wrap into a column on a
    phone. */
+/* Two panes (#136): finding on the left at a fixed width, the report on
+   the right taking the rest, each scrolling on its own. One column had
+   grown until the report sat at the bottom of the page. */
+#section-bundles { display: grid; grid-template-columns: 26rem minmax(0, 1fr);
+                   gap: 1.25rem; align-items: stretch; }
+/* The id outranks section[id^="section-"][hidden]'s display: none, which
+   would paint Bundles on every tab; the guard has to be spelled out. */
+#section-bundles[hidden] { display: none; }
+.bundles-find { min-height: 0; overflow: auto; display: flex;
+                flex-direction: column; gap: 1rem; padding-right: .25rem; }
+.bundles-report { min-height: 0; overflow: auto; display: flex;
+                  flex-direction: column; gap: 1rem; padding-left: 1.25rem;
+                  border-left: 1px solid var(--border); }
+.bundles-report > * { flex: none; }
 #bundle-empty { max-width: 70ch; margin: 0; }
-.bundle-actions { display: flex; flex-wrap: wrap; gap: .75rem;
-                  align-items: stretch; }
+/* This month's Choice as one compact entry (option A). */
+.bundle-entry { display: flex; align-items: center; justify-content: space-between;
+                gap: .75rem; padding: .75rem 1.1rem; background: var(--surface);
+                border: 1px solid var(--border); border-radius: 6px; }
+.bundle-entry strong { display: block; font-weight: 600; }
+.bundle-entry span { color: var(--muted); font-size: .9em; }
+.browse-row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.browse-auto { color: var(--muted); font-size: .9em; }
+/* Hidden side by side, where the report is already beside the list. */
+.report-back { display: none; margin-bottom: .75rem; }
+@media (max-width: 900px) {
+  #section-bundles { display: block; overflow: auto; }
+  .bundles-find, .bundles-report { overflow: visible; }
+  .bundles-report { padding-left: 0; border-left: 0; margin-top: 1.25rem;
+                    padding-top: 1.25rem; border-top: 1px solid var(--border); }
+  .report-back { display: inline-block; }
+}
 /* Each card is a column with a real gap between its parts (#133): heading,
    URL row, recent list and Browse button sat tight against each other. */
 .bundle-action { display: flex; flex-direction: column; gap: .75rem;
@@ -492,7 +521,7 @@ a { color: var(--accent); }
 .bundle-action h3 { margin: 0; font-size: 1rem; }
 .bundle-action p { margin: 0; color: var(--muted); }
 .bundle-action > button { align-self: flex-start; }
-#bundle-form { flex: 0 1 36rem; }
+#bundle-form { flex: none; }
 .bundle-url-row { display: flex; gap: .5rem; }
 #bundle-url { flex: 1 1 auto; min-width: 0; }
 /* Browse current bundles (#95): the live list, one row per bundle. */
@@ -500,11 +529,19 @@ a { color: var(--accent); }
 /* Capped, scrolling inside itself. Uncapped, 37 live bundles made the
    list 1,055 px tall and the flex column squashed the bundle report
    below it to zero height: Check filled the row and showed nothing. */
-#browse-panel { flex: 0 0 auto; max-height: 40vh; overflow: auto; }
+#browse-panel { flex: none; }
 .browse-list { width: auto; border-collapse: collapse; }
 /* Taller rows, striped like the Library table (#133), so each Check
    reads as belonging to the bundle on its own line. */
-.browse-list td { padding: .45rem .8rem; }
+.browse-list { width: 100%; }
+.browse-list tr { display: grid; grid-template-columns: auto 1fr auto;
+                  column-gap: .75rem; align-items: center; padding: .5rem .8rem; }
+/* No cell borders: in a two-line row they drew a line through its middle. */
+.browse-list td { padding: 0; border: 0; }
+.browse-list td:first-child { grid-column: 1 / -1; margin-bottom: .25rem; }
+.browse-check { justify-self: end; }
+/* The row whose report is on the right. */
+.browse-list tr.browse-current { box-shadow: inset 3px 0 0 var(--accent); }
 .browse-list tbody tr:nth-child(even) { background: var(--surface-alt); }
 /* The Books | Games switch (#134): both kinds named, with their counts. */
 .browse-kinds { display: inline-flex; margin: 0 0 .5rem;
@@ -519,7 +556,8 @@ a { color: var(--accent); }
 /* The last few checks under the URL box (#94). */
 #bundle-recent { margin: 0; font-size: .9em; }
 #bundle-recent ul { list-style: none; margin: .2rem 0; padding: 0; }
-#bundle-recent li { margin: .35rem 0; }
+#bundle-recent li { margin: .35rem 0; display: flex; flex-direction: column;
+                    align-items: flex-start; gap: .15rem; }
 .bundle-recent-label { color: var(--muted); }
 #bundle-panel { margin-bottom: .75rem; }
 /* Compact, not page-wide: stretched, the three counts sat ~600 px apart
