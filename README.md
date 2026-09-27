@@ -13,11 +13,11 @@ Local searchable catalog of HumbleBundle e-books, audiobooks, and comics.
 
 Runs on Windows, macOS, and Linux. Python 3.12 or newer.
 
-![The catalog viewer: a sortable table of owned books with genre, author, publisher and bundle columns, filtered here to a single bundle](docs/screenshot-viewer.png)
+![The catalog viewer's Library section: section tabs across the top, and a sortable table of owned books with cover, status, genre, author, publisher, bundle and rating columns, filtered here to a single bundle](docs/screenshot-viewer.png)
 
-_The viewer, filtered to one bundle — search, the column filters and the
-status chips all narrow the same table. This screenshot predates the
-sections described below and shows the older one-page layout._
+_The viewer's Library section, filtered to one bundle. The active filter
+is listed beside the toolbar, with the matching count, bulk tagging and
+download alongside; the other sections are a tab away._
 
 The viewer has five sections, switched by the tabs and addressable by
 URL: **Library** (the table, its filters and the statistics summary),
