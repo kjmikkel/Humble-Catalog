@@ -4525,21 +4525,53 @@ def test_browse_asks_for_the_live_list_only():
 
 
 def test_browse_lists_each_bundle_with_a_link_and_a_check():
-    html = _browse(_LIVE)["html"]
     for b in _LIVE:
+        html = _browse(_LIVE, then="app.selectBrowseKind(%s);" % json.dumps(b["kind"]))["html"]
         row = _browse_row(html, b["url"])
         assert f'href="{b["url"]}"' in row and 'target="_blank"' in row
         assert 'class="browse-check"' in row
-    assert "Humble Book Bundle: The World of Examplia" in html
 
 
-def test_browse_groups_books_before_games():
+# #134: grouped Books-then-Games inside a 40vh scroll box, every game
+# bundle sat below its bottom edge and the list read as books-only. A
+# switch names both kinds, with counts, and shows one at a time.
+
+def _kinds(html):
+    start = html.index('class="browse-kinds"')
+    return html[start:html.index("</div>", start)]
+
+
+def test_the_switch_names_both_kinds_with_their_counts():
+    kinds = _kinds(_browse(_LIVE)["html"])
+    assert re.search(r'data-kind="books"[^>]*aria-pressed="true"[^>]*>Books \(1\)<', kinds)
+    assert re.search(r'data-kind="games"[^>]*aria-pressed="false"[^>]*>Games \(1\)<', kinds)
+
+
+def test_books_are_shown_first_and_alone():
     html = _browse(_LIVE)["html"]
-    assert html.index(">Books<") < html.index("Examplia") < html.index(">Games<")
+    assert _LIVE[0]["url"] in html and _LIVE[1]["url"] not in html
+
+
+def test_switching_to_games_shows_only_the_games():
+    html = _browse(_LIVE, then='app.selectBrowseKind("games");')["html"]
+    assert _LIVE[1]["url"] in html and _LIVE[0]["url"] not in html
+    assert re.search(r'data-kind="games"[^>]*aria-pressed="true"', _kinds(html))
+
+
+def test_a_kind_with_nothing_live_says_so():
+    html = _browse([_LIVE[0]], then='app.selectBrowseKind("games");')["html"]
+    assert "Games (0)" in _kinds(html)
+    assert "no live game bundles" in html
+
+
+def test_the_chosen_kind_survives_a_redraw():
+    # A Check redraws the list; it must not jump back to Books.
+    html = _browse(_LIVE, then='app.selectBrowseKind("games"); app.renderBrowse();')["html"]
+    assert _LIVE[1]["url"] in html and _LIVE[0]["url"] not in html
 
 
 def test_browse_escapes_what_humble_sends():
-    html = _browse(_LIVE)["html"]
+    html = _browse(_LIVE, then='app.selectBrowseKind("games");')["html"]
     assert "Widget Quest &lt;Collection&gt;" in html and "<Collection>" not in html
 
 
@@ -4562,7 +4594,10 @@ def test_checking_a_row_fills_in_its_headline():
     assert result["posted"] == ["/api/live-bundles", "/api/bundle-preview"]
     row = _browse_row(result["html"], url)
     assert "owned 2" in row and "new 4" in row
-    assert "owned" not in _browse_row(result["html"], _LIVE[1]["url"])
+    games = _browse(_LIVE, then="""
+      await app.previewBundle(%s);
+      app.selectBrowseKind("games");""" % json.dumps(url))["html"]
+    assert "owned" not in _browse_row(games, _LIVE[1]["url"])
 
 
 def test_a_row_is_only_linked_to_a_humble_page():
