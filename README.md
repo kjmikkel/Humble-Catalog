@@ -436,7 +436,8 @@ These work together: `import-games` is what gives `bundle`, `choice` and
 - `python -m humble_catalog bundle <url>` - point it at a
   live HumbleBundle page and see, for each tier, how many items it holds,
   how many you already own, how many would be new, and which titles that
-  tier adds over the cheaper ones. For books ownership is
+  tier adds over the cheaper ones, then which titles you already own.
+  For books ownership is
   exact - the page names each item with the same internal id your
   catalog stores - so a re-run of a bundle you bought before reads as
   owned rather than as a guess. Titles that merely _look_ like something

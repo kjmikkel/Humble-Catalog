@@ -281,10 +281,42 @@ function renderBundlePreview() {
           >${esc(o.item_name)}</button>
         ${matchStrength(o)}</li>`)
         .join("")}</ul></section>` : "";
+  // Which titles the owned counts are (#92), once for the whole bundle
+  // since the tiers are cumulative. Collapsed: the new titles are what a
+  // purchase is decided on, and this list is usually the longer one. A
+  // book leads to its Library row, like an overlap; a game has no row,
+  // so it names what it matched instead. `|| []` for an older server.
+  const ownedHits = bundlePreview.owned_items || [];
+  // The jump searches Library for the button's text, so the button is the
+  // row's own name; the bundle's spelling leads it when the two differ.
+  const ownedBook = (o) => {
+    const row = o.item_name || o.offered;
+    const button = `<button class="bundle-jump" data-item="${esc(o.item_id)}"
+            >${esc(row)}</button>`;
+    return row === o.offered ? button : `${esc(o.offered)} ~ ${button}`;
+  };
+  const owned = ownedHits.length ? `
+    <details class="bundle-owned">
+      <summary>Already owned (${ownedHits.length})</summary>
+      <ul>${ownedHits.map((o) => `<li>${o.item_id != null
+        ? ownedBook(o)
+        : esc(o.offered)}${o.owned_title && o.owned_title !== o.offered
+        ? ` ~ ${esc(o.owned_title)}` : ""}${o.keyed
+        ? ' <span class="bundle-score">(Humble key)</span>' : ""}</li>`)
+        .join("")}</ul>
+    </details>` : "";
+  // The name links to the page that was checked, so a result always says
+  // which URL it belongs to. Only a Humble https URL is ever linked: the
+  // server already refused anything else, and this is the second guard.
+  const pageUrl = bundlePreview.url || "";
+  const name = /^https:\/\/(www\.)?humblebundle\.com\//i.test(pageUrl)
+    ? `<a href="${esc(pageUrl)}" target="_blank" rel="noopener noreferrer"
+        >${esc(bundlePreview.name)}</a>`
+    : esc(bundlePreview.name);
   panel.innerHTML = `<details${bundlePreviewOpen ? " open" : ""}>
-    <summary>${esc(bundlePreview.name)}</summary>
+    <summary>${name}</summary>
     <table class="bundle-tiers">${head}<tbody>${rows}</tbody></table>
-    ${lists}${keyed}${series}${overlaps}</details>`;
+    ${lists}${owned}${keyed}${series}${overlaps}</details>`;
   panel.querySelector("details").addEventListener("toggle",
     (ev) => { bundlePreviewOpen = ev.target.open; });
 }

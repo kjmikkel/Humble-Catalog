@@ -4400,3 +4400,80 @@ def test_a_blocked_store_degrades_to_no_list():
       } finally { globalThis.localStorage = real; }
     })()""" % json.dumps(_URL_A))
     assert got == []
+
+
+# -- The bundle's page, and what you already own (#92) -------------------
+
+def _summary(html):
+    return html[html.index("<summary>"):html.index("</summary>")]
+
+
+def test_the_bundle_name_links_to_the_page_that_was_checked():
+    summary = _summary(_render_bundle(_BUNDLE_REPORT))
+    assert f'href="{_BUNDLE_REPORT["url"]}"' in summary
+    assert 'target="_blank"' in summary
+    assert 'rel="noopener noreferrer"' in summary
+    assert "Humble Book Bundle: The World of Examplia" in summary
+
+
+@pytest.mark.parametrize("url", [
+    "", "javascript:alert(1)", "http://www.humblebundle.com/books/x",
+    "https://humblebundle.com.example.net/books/x",
+])
+def test_anything_but_a_humble_https_url_is_not_linked(url):
+    summary = _summary(_render_bundle(dict(_BUNDLE_REPORT, url=url)))
+    assert "<a " not in summary
+    assert "Humble Book Bundle: The World of Examplia" in summary
+
+
+_OWNED = [
+    {"offered": "The Quiet Harbor: A Novel", "item_id": 1,
+     "owned_title": None, "keyed": False},
+    {"offered": "Widget Quest: Definitive Edition", "item_id": None,
+     "owned_title": "Widget Quest", "keyed": False},
+    {"offered": "Cinder Vale", "item_id": None,
+     "owned_title": "Cinder Vale", "keyed": True},
+]
+
+
+def _owned_block(html):
+    start = html.index('class="bundle-owned"')
+    return html[start:html.index("</details>", start)]
+
+
+def test_owned_titles_are_listed_collapsed_below_the_new_ones():
+    html = _render_bundle(dict(_BUNDLE_REPORT, owned_items=_OWNED))
+    assert html.index("adds 3 new") < html.index('class="bundle-owned"')
+    block = _owned_block(html)
+    assert "Already owned (3)" in block
+    opening = html[html.rindex("<details", 0, html.index('class="bundle-owned"')):]
+    assert " open" not in opening[:opening.index(">")]
+
+
+def test_an_owned_book_links_to_its_library_row():
+    block = _owned_block(_render_bundle(dict(_BUNDLE_REPORT, owned_items=_OWNED)))
+    assert 'class="bundle-jump" data-item="1"' in block
+    assert "The Quiet Harbor: A Novel" in block
+
+
+def test_an_owned_game_names_what_it_matched_and_how():
+    block = _owned_block(_render_bundle(dict(_BUNDLE_REPORT, owned_items=_OWNED)))
+    assert "Widget Quest: Definitive Edition" in block and "Widget Quest<" in block
+    assert "Humble key" in block
+    assert block.count("data-item=") == 1
+
+
+def test_no_owned_titles_means_no_block():
+    # An older server sends no owned_items at all.
+    assert 'class="bundle-owned"' not in _render_bundle(_BUNDLE_REPORT)
+    assert 'class="bundle-owned"' not in _render_bundle(
+        dict(_BUNDLE_REPORT, owned_items=[]))
+
+
+def test_an_owned_book_jumps_by_its_rows_name_not_the_offered_one():
+    owned = [{"offered": "The Quiet Harbor: A Novel", "item_id": 1,
+              "item_name": "Quiet Harbor (Reissue)", "owned_title": None,
+              "keyed": False}]
+    block = _owned_block(_render_bundle(dict(_BUNDLE_REPORT, owned_items=owned)))
+    assert re.search(r'data-item="1"\s*>Quiet Harbor \(Reissue\)</button>', block)
+    assert "The Quiet Harbor: A Novel ~" in block
