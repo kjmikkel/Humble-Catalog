@@ -14,7 +14,7 @@ owner=$2
 
 # (/|$): a symlink or submodule named node_modules, .claude or dist is one path
 # with no slash, and node and Claude follow it.
-protected='^\.trail(/|$)|^node_modules(/|$)|^dist$|^dist/claude(/|$)|(^|/)\.claude(/|$)|(^|/)claude(\.local)?\.md$|(^|/)agents\.md$|(^|/)\.mcp\.json$'
+protected='^\.trail(/|$)|(^|/)node_modules(/|$)|(^|/)dist$|(^|/)dist/claude(/|$)|(^|/)\.claude(/|$)|(^|/)claude(\.local)?\.md$|(^|/)agents\.md$|(^|/)\.mcp\.json$'
 protected+='|^\.jeffy(/|$)|^(plan|backlog)\.md$|^journal[^/]*\.md$|^docs/superpowers(/|$)|^docs/handoffs(/|$)'
 # hook.cjs require.resolve()s trail from the repo, and Node honours package
 # self-reference: a root package.json named after trail, with "exports"
@@ -23,9 +23,12 @@ protected+='|^package\.json$'
 short_name='(^|/)[^/]*~[0-9][^/]*(/|$)' # 8.3 alias such as TRAIL~1, which Windows may resolve to .trail
 # .trail/hook.cjs runs `npm root -g` through cmd.exe, which tries the current
 # directory first with every default PATHEXT extension. That is the session's
-# directory, which may be any folder, so npm.* is blocked at every depth.
-pathext='(com|exe|bat|cmd|vbs|vbe|js|jse|wsf|wsh|msc)'
-root_exec="^[^/]+\.$pathext\$|(^|/)npm\.$pathext\$"
+# directory, which may be any folder, so npm.* (any extension, since PATHEXT
+# varies by machine) is blocked at every depth. hook.cjs resolves trail from
+# CLAUDE_PROJECT_DIR, falling back to the cwd, hence node_modules and
+# dist/claude at every depth above.
+pathext='(com|exe|bat|cmd|vbs|vbe|js|jse|wsf|wsh|msc|cpl)'
+root_exec="^[^/]+\.$pathext\$|(^|/)npm\.[^/]*\$"
 # A name the folder below cannot fold safely: see fold.
 unsafe='^<unsafe>$'
 

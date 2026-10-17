@@ -88,4 +88,9 @@ expect fail "planted NPM.Bat deep down"           someone  kjmikkel humble_catal
 expect fail "root package.json"                   someone  kjmikkel package.json
 expect pass "a package.json elsewhere"            someone  kjmikkel tests/fixtures/package.json
 
+expect fail "nested node_modules"                 someone  kjmikkel docs/node_modules/@trailhq/trail-code/package.json
+expect fail "nested dist/claude"                  someone  kjmikkel docs/dist/claude/hooks.js
+expect fail "npm with any extension"              someone  kjmikkel docs/npm.cpl
+expect fail "root .cpl"                           someone  kjmikkel x.cpl
+
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failed"; exit 1; }

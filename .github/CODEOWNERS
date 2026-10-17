@@ -4,8 +4,8 @@
 # No trailing slash, so a symlink with the same name is covered too.
 # Enforced for outside contributors by the guard / trail-owner-only CI job.
 /.trail @kjmikkel
-/node_modules @kjmikkel
-/dist/claude @kjmikkel
+node_modules @kjmikkel
+**/dist/claude @kjmikkel
 .claude @kjmikkel
 CLAUDE.md @kjmikkel
 CLAUDE.local.md @kjmikkel
