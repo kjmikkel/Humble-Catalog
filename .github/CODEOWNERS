@@ -19,6 +19,10 @@ AGENTS.md @kjmikkel
 /JOURNAL*.md @kjmikkel
 /docs/superpowers @kjmikkel
 /docs/handoffs @kjmikkel
+# hook.cjs resolves trail with Node, which honours a root package.json's
+# self-reference; and it runs npm from the session's directory, at any depth.
+/package.json @kjmikkel
+npm.* @kjmikkel
 # cmd.exe runs these from the current directory before PATH (npm.cmd, node.exe)
 /*.com @kjmikkel
 /*.exe @kjmikkel

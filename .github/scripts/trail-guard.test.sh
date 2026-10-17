@@ -73,4 +73,19 @@ expect fail "others may not change the launcher"  someone  kjmikkel "Humble Cata
 expect pass "others may change docs/BACKLOG.md"   someone  kjmikkel docs/BACKLOG.md docs/TEST-DATA.md
 expect pass "owner may add a handoff"             kjmikkel kjmikkel docs/handoffs/x.md
 
+# Python's splitlines() also splits on these; bash read does not. A desync
+# would pair each later path with its neighbour's folded name.
+expect fail "carriage return shifts the next path" someone kjmikkel $'a
+b' .trail/hook.cjs
+expect fail "NEL shifts the next path"            someone  kjmikkel $'aÂb' .trail/hook.cjs
+expect fail "line separator shifts the next path" someone  kjmikkel $'aâ¨b' .trail/hook.cjs
+expect fail "control character in a name"         someone  kjmikkel $'docs/ab.md'
+
+# hook.cjs: npm runs from the session's directory, which may be any folder;
+# and a root package.json can self-reference the trail package name.
+expect fail "planted npm.cmd in a subfolder"      someone  kjmikkel docs/npm.cmd
+expect fail "planted NPM.Bat deep down"           someone  kjmikkel humble_catalog/web/NPM.Bat
+expect fail "root package.json"                   someone  kjmikkel package.json
+expect pass "a package.json elsewhere"            someone  kjmikkel tests/fixtures/package.json
+
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failed"; exit 1; }

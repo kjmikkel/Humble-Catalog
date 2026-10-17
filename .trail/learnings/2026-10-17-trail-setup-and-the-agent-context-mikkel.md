@@ -24,3 +24,7 @@ touches:
 - Trail writes `graft/` (session files, telemetry id) at the repo root; it is gitignored. `.trail/cache/` is ignored by `.trail/.gitignore`, and leak_check skips any dir named `cache`.
 - The guard only blocks merges once `trail-owner-only` is a required check on main.
 - Edit the guard's patterns in lowercase: paths are casefolded before matching. Run `bash .github/scripts/trail-guard.test.sh` after any change.
+- The guard pairs raw and folded paths line by line, so the Python folder must split on "
+" only: `splitlines()` also splits on , NEL and U+2028 and shifts every later path (a real bypass, also present in the Dracula copy). Names with control or separator characters fail closed.
+- hook.cjs runs `npm` through cmd.exe from the session's directory (any depth), and Node's package self-reference makes a root `package.json` a resolution input. Both are protected.
+- The guard trusts the PR opener; that holds only while the owner is the sole account with push access here.
