@@ -38,6 +38,14 @@ what they actually own may be committed to this repo:
   holding it can read the whole catalog from the home network. Like
   `harvest --failures`, it is terminal output nothing scans: never paste
   it into a commit, doc, issue or screenshot.
+- **Trail learnings and session handoffs are committed text written by
+  a session.** `.trail/learnings/` (from `trail note`, and from
+  `trail init`, which reads past sessions here — and those sessions saw
+  real titles) and `docs/handoffs/` follow the same rule as docs: no
+  real item from the library. Read a new learning before committing it,
+  and run `leak_check.py`. Both are agent context, so outside PRs may not
+  change them: the `guard` workflow and `.github/CODEOWNERS` enforce it
+  (`.github/scripts/trail-guard.sh` lists every protected path).
 - Run `.venv/Scripts/python scripts/leak_check.py` after adding tests,
   fixtures, or docs that name books, bundles, or people — it fails if
   anything from the real library appears in the repo. A single ordinary

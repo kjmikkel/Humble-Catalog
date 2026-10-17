@@ -31,3 +31,8 @@ humble_catalog.egg-info/
 
 # Jeffy transient loop state (session-scoped, never commit)
 .claude/jeffy-loop.local.md
+
+# Trail's code-graph state (per-session files, telemetry id). .trail/cache/
+# is ignored by .trail/.gitignore; .trail/learnings/ is committed and is
+# scanned by leak_check like any other text.
+graft/
