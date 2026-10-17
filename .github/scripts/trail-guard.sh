@@ -28,7 +28,8 @@ short_name='(^|/)[^/]*~[0-9][^/]*(/|$)' # 8.3 alias such as TRAIL~1, which Windo
 # CLAUDE_PROJECT_DIR, falling back to the cwd, hence node_modules and
 # dist/claude at every depth above.
 pathext='(com|exe|bat|cmd|vbs|vbe|js|jse|wsf|wsh|msc|cpl)'
-root_exec="^[^/]+\.$pathext\$|(^|/)npm\.[^/]*\$"
+# npm.cmd in turn runs node, looked up the same way.
+root_exec="^[^/]+\.$pathext\$|(^|/)(npm|node)\.[^/]*\$"
 # A name the folder below cannot fold safely: see fold.
 unsafe='^<unsafe>$'
 

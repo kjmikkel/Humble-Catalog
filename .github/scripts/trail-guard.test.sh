@@ -92,5 +92,7 @@ expect fail "nested node_modules"                 someone  kjmikkel docs/node_mo
 expect fail "nested dist/claude"                  someone  kjmikkel docs/dist/claude/hooks.js
 expect fail "npm with any extension"              someone  kjmikkel docs/npm.cpl
 expect fail "root .cpl"                           someone  kjmikkel x.cpl
+expect fail "planted node.exe in a subfolder"     someone  kjmikkel docs/node.exe
+expect pass "others may change viewer JS"         someone  kjmikkel humble_catalog/web/static/app.js
 
 [ "$failures" -eq 0 ] && echo "all passed" || { echo "$failures failed"; exit 1; }

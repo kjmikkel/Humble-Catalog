@@ -23,6 +23,7 @@ AGENTS.md @kjmikkel
 # self-reference; and it runs npm from the session's directory, at any depth.
 /package.json @kjmikkel
 npm.* @kjmikkel
+node.* @kjmikkel
 # cmd.exe runs these from the current directory before PATH (npm.cmd, node.exe)
 /*.com @kjmikkel
 /*.exe @kjmikkel
