@@ -1,0 +1,37 @@
+name: guard
+
+# pull_request_target runs this file and the guard script as they are on the base
+# branch, so a PR cannot edit its own guard. It never checks out or runs PR code:
+# the changed files come from the API.
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  trail-owner-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash .github/scripts/trail-guard.test.sh
+      - name: Only the owner may change agent context
+        shell: bash # -eo pipefail: a failed API call must fail the job, not pass an empty list
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          gh api "repos/$REPO/pulls/$PR/files" --paginate > files.json
+          # The files API stops at 3,000; fail closed rather than check a partial list.
+          expected=$(gh api "repos/$REPO/pulls/$PR" --jq .changed_files)
+          listed=$(jq -s 'add | length' files.json)
+          if [ "$listed" != "$expected" ]; then # string compare: a non-number fails closed too
+            echo "::error::Listed $listed of $expected changed files; cannot check the rest."
+            exit 1
+          fi
+          jq -rs 'add | .[] | .filename, (.previous_filename // empty)' files.json \
+            | bash .github/scripts/trail-guard.sh "$AUTHOR" "$OWNER"
