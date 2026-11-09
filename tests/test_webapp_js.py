@@ -4969,7 +4969,9 @@ def test_the_inline_editor_names_every_field():
 def test_the_statistics_counts_say_what_they_show():
     html = _render_stats(_stats_payload([
         _section("type", "By type", [("E-books", 6)])]))
-    assert 'aria-label="Show E-books (6)"' in html
+    # The visible count first (#152): axe's label-in-name rule flagged
+    # "Show E-books (6)".
+    assert 'aria-label="6: show E-books"' in html
 
 
 def test_the_active_filter_chip_names_the_filter_it_clears():

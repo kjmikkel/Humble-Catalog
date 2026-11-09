@@ -215,9 +215,12 @@ NOTHING_TO_CHECK = (
 # and a check that always fails is one that stops being read. "backups"
 # holds snapshots written by `backup`; a cover archive's entry names are
 # machine_names, so it trips on ~120 terms every time.
-EXCLUDE_DIRS = {".git", ".venv", "covers", "cache", "backups", "__pycache__",
-                "humble_catalog.egg-info", ".playwright-profile", ".secrets",
-                "Reference spreadsheets"}
+# "node_modules" is the same case as .venv: third-party code installed from
+# package.json (axe-core, #152), gitignored, never committed. axe-core's
+# colour-name tables matched a term once.
+EXCLUDE_DIRS = {".git", ".venv", "node_modules", "covers", "cache", "backups",
+                "__pycache__", "humble_catalog.egg-info", ".playwright-profile",
+                ".secrets", "Reference spreadsheets"}
 
 # Matched against the whole FILENAME, not Path.suffix. SQLite's sidecars
 # are the reason: `catalog.db-wal` has suffix ".db-wal", so a suffix test

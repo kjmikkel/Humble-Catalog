@@ -1,0 +1,19 @@
+# Known accessibility violations in the rendered viewer (#152).
+#
+# scripts/a11y_viewer.py runs axe-core (WCAG 2.0-2.2, A and AA) over every
+# section, at 1280 and 375 px, in the light and dark themes, and in the
+# opened states (overview, column picker, inline editor, phone sheet,
+# Maintenance's panels), on the demo catalog. It fails on a violation not
+# listed here, and on a line here that no longer occurs, so this file
+# only shrinks and every fix shows.
+#
+# Format, one per line:
+#   state | width | theme | axe rule | target | #issue | reason
+# Targets have :nth-child() folded away: which row a node is in is demo
+# data, not part of the defect. `python scripts/a11y_viewer.py
+# --write-baseline` prints the current findings in this form, to annotate.
+#
+# Empty at the start. The first run found three classes the UI/UX pass
+# had not (label-in-name on the overview counts, 24 px targets in the
+# editor and Maintenance, the phone sheet's pressed "Unread" in dark), and
+# #152 fixed them rather than listing them.

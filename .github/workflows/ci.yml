@@ -129,6 +129,21 @@ jobs:
           --require-installed
           --screenshot "$RUNNER_TEMP/smoke-failure.png"
 
+      # The accessibility ratchet (#152): axe-core over every section, both
+      # widths and both themes, against tests/a11y-baseline.txt. axe-core
+      # comes from the lockfile, never a CDN; --ignore-scripts because it
+      # needs no install step and none should run. Same wheel, same demo.
+      - name: Install axe-core
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Accessibility ratchet
+        working-directory: ${{ runner.temp }}
+        run: >-
+          "$RUNNER_TEMP/smoke/bin/python"
+          "$GITHUB_WORKSPACE/scripts/a11y_viewer.py"
+          --require-installed
+          --axe "$GITHUB_WORKSPACE/node_modules/axe-core/axe.min.js"
+
       # What the page looked like when it failed. The demo catalog is all
       # it can show, so this is safe to publish as an artifact.
       - name: Keep the failure screenshot

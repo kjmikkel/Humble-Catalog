@@ -1,0 +1,8 @@
+{
+  "name": "humble-catalog-dev",
+  "private": true,
+  "description": "Dev-only tools. axe-core runs the viewer's accessibility ratchet (scripts/a11y_viewer.py, #152); nothing here ships in the wheel.",
+  "devDependencies": {
+    "axe-core": "4.14.0"
+  }
+}
