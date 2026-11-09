@@ -195,6 +195,7 @@ const publish = `
   resetBrowse: () => { liveBundles = null; liveBundlesError = null; headlines.clear(); browseKind = "books"; browseFilter = ""; },
   clearRecentBundles, renderRecentBundles,
   TASK_CARDS, TASK_GROUPS, TAKEOVER_TEXT, renderTasks, startTask, taskMessage,
+  isoDate, isoDateTime,
   setHandoffAvailable: (v) => { handoffAvailable = v; },
   setSetupState: (v) => { setupState = v; },
   previewChoice, renderChoicePreview,
