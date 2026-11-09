@@ -2,8 +2,11 @@
 
 Titles are invented -- see docs/TEST-DATA.md. This file is what stops
 scripts/demo_catalog.py rotting unnoticed between visual checks."""
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -229,3 +232,15 @@ def test_demo_jobs_run_on_the_demo_catalog_not_the_real_one(tmp_path):
     # The CLI backs up into backups/ beside the catalog it opened, so the
     # restore picker has to list that same folder.
     assert Path(app.config["BACKUPS_DIR"]).resolve() == runner_cwd / "backups"
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"),
+                    reason="POSIX only: Windows temp folders are per user")
+def test_a_demo_folder_others_can_write_to_is_refused(tmp_path):
+    # In a shared /tmp the fixed name can already exist, prepared by
+    # someone else; jobs run in it and the viewer serves its catalog.
+    folder = tmp_path / "humble-catalog-demo"
+    folder.mkdir()
+    folder.chmod(0o777)
+    with pytest.raises(SystemExit, match="not a private folder"):
+        demo_catalog.demo_db_path(tmp_path)

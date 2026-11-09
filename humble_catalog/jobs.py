@@ -72,6 +72,26 @@ def _row_commands(command):
     return (name,)
 
 
+def _child_env():
+    """The environment a job's child process runs with.
+
+    PYTHONSAFEPATH keeps the working directory off the child's sys.path.
+    A job runs in the folder holding the viewer's catalog -- for the demo,
+    a folder in the temp directory -- and `python -m` would otherwise put
+    that folder first, so any .py file dropped there would shadow a module
+    the CLI imports. The package itself is then found through PYTHONPATH,
+    pinned to where the viewer's own copy lives, so an uninstalled checkout
+    runs the same code it serves.
+    """
+    package_root = str(Path(__file__).resolve().parent.parent)
+    inherited = os.environ.get("PYTHONPATH")
+    return {**os.environ,
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONSAFEPATH": "1",
+            "PYTHONPATH": (package_root + os.pathsep + inherited
+                           if inherited else package_root)}
+
+
 class Busy(Exception):
     """A job is already running (or one is recorded as running elsewhere)."""
 
@@ -240,7 +260,7 @@ class JobRunner:
             line, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
             cwd=self.cwd, creationflags=creationflags,
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+            env=_child_env())
 
     def _conn(self):
         """A short-lived connection of this thread's own.

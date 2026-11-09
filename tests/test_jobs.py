@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 import time
 import pytest
 from humble_catalog import db, jobs
@@ -301,3 +302,35 @@ def test_a_viewer_whose_database_is_not_catalog_db_cannot_start_a_job(
     runner = jobs.JobRunner(db_path=str(tmp_path / "demo.db"))
     with pytest.raises(ValueError, match="catalog.db"):
         runner.start("reparse")
+
+
+def test_a_module_planted_beside_the_catalog_is_never_imported(
+        monkeypatch, tmp_path):
+    # The child now runs in the catalog's folder, which for the demo is in
+    # the temp directory. `python -m` and `-c` put the working directory
+    # first on sys.path, so without PYTHONSAFEPATH a file dropped there
+    # would shadow any module the CLI imports.
+    db.connect(str(tmp_path / "catalog.db")).close()
+    (tmp_path / "planted.py").write_text("raise SystemExit('hijacked')")
+    runner = jobs.JobRunner(db_path=str(tmp_path / "catalog.db"))
+    monkeypatch.setattr(jobs, "argv", lambda command, options=None: [
+        sys.executable, "-c",
+        "import importlib.util; print(importlib.util.find_spec('planted'))"])
+    runner.start("reparse")
+    assert runner.wait(timeout=30) == 0
+    assert "None" in runner.state()["log"]
+
+
+def test_the_child_imports_the_viewer_s_own_package(monkeypatch, tmp_path):
+    # With the working directory off sys.path, the package must still come
+    # from where the viewer's came from, installed or not.
+    db.connect(str(tmp_path / "catalog.db")).close()
+    runner = jobs.JobRunner(db_path=str(tmp_path / "catalog.db"))
+    monkeypatch.setattr(jobs, "argv", lambda command, options=None: [
+        sys.executable, "-c",
+        "import humble_catalog, pathlib; "
+        "print(pathlib.Path(humble_catalog.__file__).resolve().parent)"])
+    runner.start("reparse")
+    assert runner.wait(timeout=30) == 0
+    here = str(Path(jobs.__file__).resolve().parent)
+    assert here in runner.state()["log"]

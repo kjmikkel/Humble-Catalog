@@ -19,6 +19,7 @@ Serves on port 8099 -- deliberately not 8087, which `serve` uses and
 """
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -261,8 +262,28 @@ def demo_db_path(base=None):
     outside .gitignore's rules.
     """
     folder = Path(base or tempfile.gettempdir()) / "humble-catalog-demo"
-    folder.mkdir(parents=True, exist_ok=True)
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _check_private(folder)
     return folder / "catalog.db"
+
+
+def _check_private(folder):
+    """Refuse a demo folder someone else could have prepared.
+
+    On Linux and macOS the temp directory is shared, so the fixed name can
+    already exist, made by another user. Jobs run in this folder and the
+    viewer serves its catalog, so it must be ours and writable by no one
+    else. Windows gives every user a temp directory of their own, and its
+    permissions do not map onto these bits, so there is nothing to check.
+    """
+    if not hasattr(os, "getuid"):
+        return
+    st = folder.stat()
+    if st.st_uid != os.getuid() or st.st_mode & 0o022:
+        raise SystemExit(
+            f"{folder} is not a private folder of yours (owner or "
+            "permissions). Remove it, or move it aside, and run the demo "
+            "again.")
 
 
 def make_app(db_path):
