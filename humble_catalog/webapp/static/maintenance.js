@@ -155,8 +155,8 @@ document.addEventListener("click", async (ev) => {
   const el = ev.target;
   if (el.classList.contains("cand-btn")) {
     armOrFire(el, async () => {
-      await post(`/api/items/${el.dataset.id}/choose`, {candidate: +el.dataset.idx});
-      await load();
+      if (await saved(`/api/items/${el.dataset.id}/choose`,
+                      {candidate: +el.dataset.idx})) await load();
     });
   } else if (el.classList.contains("url-fetch")) {
     const id = el.dataset.id;
@@ -178,9 +178,8 @@ document.addEventListener("click", async (ev) => {
     result.querySelector(".apply-fetched").dataset.candidate = JSON.stringify(c);
   } else if (el.classList.contains("apply-fetched")) {
     armOrFire(el, async () => {
-      await post(`/api/items/${el.dataset.id}/apply`,
-                 {candidate: JSON.parse(el.dataset.candidate)});
-      await load();
+      if (await saved(`/api/items/${el.dataset.id}/apply`,
+                      {candidate: JSON.parse(el.dataset.candidate)})) await load();
     });
   } else if (el.classList.contains("dupe-keep")) {
     armOrFire(el, async () => {
@@ -195,9 +194,8 @@ document.addEventListener("click", async (ev) => {
     });
   } else if (el.classList.contains("dupe-dismiss")) {
     armOrFire(el, async () => {
-      await post("/api/dismiss_pair",
-        {id_a: +el.dataset.a, id_b: +el.dataset.b});
-      await load();
+      if (await saved("/api/dismiss_pair",
+                      {id_a: +el.dataset.a, id_b: +el.dataset.b})) await load();
     });
   } else if (el.id === "dupe-clear") {
     manualPair = {a: null, b: null};

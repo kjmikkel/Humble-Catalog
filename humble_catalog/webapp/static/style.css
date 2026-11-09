@@ -90,6 +90,15 @@ h1 { margin: 0 0 .5rem; font-size: 1.2rem; }
 #search { width: 100%; padding: .4rem; }
 #run-banner { background: var(--banner-bg); border: 1px solid var(--banner-border);
               padding: .4rem .6rem; margin-bottom: .5rem; border-radius: 4px; }
+/* Never `hidden` -- it is a live region (#142) -- so an empty one simply
+   collapses. --fg on --surface rather than white on --danger: the text is
+   the message, and the red border carries the urgency. */
+#write-error { margin: 0 0 .5rem; padding: .4rem .6rem; border-radius: 4px;
+               border: 2px solid var(--danger); background: var(--surface);
+               color: var(--fg); font-weight: 600; }
+/* Collapsed, never display:none: that would drop the region from the
+   accessibility tree, and its first message would go unannounced. */
+#write-error:empty { margin: 0; padding: 0; border: 0; }
 /* Only the table scrolls sideways, so the scroller wraps the table alone:
    with <main> as the scroller the panels slid left along with it, which
    reads exactly like the whole page scrolling. <main> just lays the
