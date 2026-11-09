@@ -1411,6 +1411,37 @@ function statRow(key, row, genre) {
     <td class="stat-count">${cell}</td>${manage}</tr>`;
 }
 
+// Open and close the inline editor, putting focus where the keyboard
+// user was working (#146). Both re-render the tbody, which destroys the
+// focused control, so without this focus fell to <body> and the next Tab
+// started again from the top of the page -- about 200 stops before the
+// last row of even a small table. Same re-render-then-focus approach as
+// applyRating's stars.
+//
+// Opening lands on the editor's first field; closing, by Save or Cancel,
+// goes back to the row's own Edit button. If the save moved the row out
+// of the current filter there is no button to return to, and focus is
+// left where the browser puts it.
+function openEditor(id) {
+  editingId = id;
+  const it = items.find(i => i.id === id);
+  editingTags = {genre: [...it.genre], authors: [...it.authors],
+                 user_tags: [...it.user_tags]};
+  editingTags[personField(it)] = [...person(it)];
+  render();
+  document.querySelector("#catalog tbody .edit-field")?.focus();
+}
+
+// `redraw` is render for Cancel and load for Save, which has to fetch the
+// row's new values first.
+async function closeEditor(redraw) {
+  const id = editingId;
+  editingId = null;
+  editingTags = null;
+  await redraw();
+  document.querySelector(`#catalog tbody .edit[data-id="${id}"]`)?.focus();
+}
+
 document.addEventListener("click", async (ev) => {
   const el = ev.target;
   if (el.classList.contains("star")) {
@@ -1418,18 +1449,11 @@ document.addEventListener("click", async (ev) => {
     const item = items.find(i => i.id === id);
     await applyRating(id, n, item.my_rating === n ? null : n);  // click current to clear
   } else if (el.classList.contains("edit")) {
-    editingId = +el.dataset.id;
-    const it = items.find(i => i.id === editingId);
-    editingTags = {genre: [...it.genre], authors: [...it.authors],
-                   user_tags: [...it.user_tags]};
-    editingTags[personField(it)] = [...person(it)];
-    render();
+    openEditor(+el.dataset.id);
   } else if (el.classList.contains("show-all")) {
     showAllRows();
   } else if (el.classList.contains("edit-cancel")) {
-    editingId = null;
-    editingTags = null;
-    render();
+    await closeEditor(render);
   } else if (el.id === "sidebar-toggle") {
     toggleSidebar();
   } else if (el.classList.contains("active-x")) {
@@ -1575,9 +1599,7 @@ document.addEventListener("click", async (ev) => {
     if (!(await saved(`/api/items/${id}/user-tags`, {tags: user_tags})))
       return;
     if (!(await saved(`/api/items/${id}/comment`, {comment}))) return;
-    editingId = null;
-    editingTags = null;
-    await load();
+    await closeEditor(load);
   } else if (el.classList.contains("revert")) {
     armOrFire(el, async () => {
       if (await saved(`/api/items/${el.dataset.id}/revert`)) await load();

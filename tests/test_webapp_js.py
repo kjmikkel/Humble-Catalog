@@ -2699,6 +2699,31 @@ def test_the_announcement_is_dropped_once_rows_come_back():
     assert said == ""
 
 
+# ---- #146: the inline editor keeps the keyboard where it was ------------
+
+def test_opening_the_editor_focuses_its_first_field():
+    focused = eval_js("""(() => {
+      dom.reset();
+      app.setItems([%s]);
+      app.openEditor(1);
+      return [app.getEditingId(), dom.focused];
+    })()""" % json.dumps(_item()))
+    assert focused == [1, ["#catalog tbody .edit-field"]]
+
+
+def test_closing_the_editor_returns_focus_to_the_rows_edit_button():
+    focused = eval_js("""(async () => {
+      dom.reset();
+      app.setItems([%s]);
+      app.openEditor(1);
+      dom.focused.length = 0;
+      let redrawn = false;
+      await app.closeEditor(async () => { redrawn = true; });
+      return [app.getEditingId(), redrawn, dom.focused];
+    })()""" % json.dumps(_item()))
+    assert focused == [None, True, ['#catalog tbody .edit[data-id="1"]']]
+
+
 def _driven(items_json, body):
     """Run `body` against a loaded catalog with a stubbed fetch.
 

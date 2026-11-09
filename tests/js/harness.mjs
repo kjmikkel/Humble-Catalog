@@ -194,6 +194,7 @@ const publish = `
   setTagEditMode: (v) => { tagEditMode = v; },
   sortValue, renderExportButton, downloadExport,
   statusSelect, READ_STATUS_ORDER,
+  openEditor, closeEditor, getEditingId: () => editingId,
   statusCell, nameExtras, applyMode, sectionAllowed, READ_ONLY_SECTIONS,
   start,
   renderCards, isNarrow, NARROW_QUERY,
