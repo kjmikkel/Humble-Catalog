@@ -803,6 +803,19 @@ body[data-mode="read-only"] #column-picker { display: none; }
    chevron; the whole face is the target, so nothing inside needs its own
    except the bundle links, which stay links. */
 .card.tappable { cursor: pointer; position: relative; }
+/* The title is the card's button (#149). It keeps the title's look, and
+   its ::after covers the whole card so a tap anywhere opens the sheet.
+   The focus ring stays the shared :focus-visible one, on the title: moving
+   it to the overlay would mean suppressing it on the button, which
+   test_nothing_suppresses_the_focus_outline rules out. */
+.card-open { display: block; width: 100%; padding: 0; border: 0;
+             background: none; color: inherit; font: inherit;
+             font-weight: bold; text-align: left; cursor: pointer;
+             overflow-wrap: anywhere; }
+.card-open::after { content: ""; position: absolute; inset: 0;
+                    border-radius: 6px; }
+/* Above the overlay, so a tap on a link opens the bundle, not the sheet. */
+.card.tappable .card-link { position: relative; z-index: 1; }
 .card.tappable:active { background: var(--surface-alt); }
 .card-chevron { position: absolute; top: .5rem; right: .6rem;
                 color: var(--muted); font-size: 1.2rem; line-height: 1; }
