@@ -296,9 +296,105 @@ def make_app(db_path):
     repo root, and the Tasks tab's restore picker would otherwise list the
     real snapshots, their dates and sizes in frame in any screenshot.
     """
-    return create_app(
+    app = create_app(
         db_path=str(db_path), covers_dir=str(COVERS_DIR),
         backups_dir=str(Path(db_path).resolve().parent / "backups"))
+    add_gallery(app)
+    return app
+
+
+GALLERY_JS = Path(__file__).resolve().parent / "demo_gallery.js"
+GALLERY_THEMES = ("light", "dark")
+
+# The gallery's own layout. Colours come only from the viewer's tokens, so
+# each frame shows the components on the palette they really sit on.
+GALLERY_CSS = """
+<style>
+  /* The viewer's body never scrolls (each section owns the viewport), so
+     <main> becomes the gallery's scroller. */
+  main { overflow-y: auto; }
+  .gallery { padding: 1rem; display: grid; gap: 1.5rem;
+             grid-template-columns: minmax(0, 1fr); }
+  .gallery-group h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .gallery-group { display: flex; flex-wrap: wrap; gap: 1rem; align-items: start; }
+  .gallery-group h2 { flex-basis: 100%; }
+  .gallery-state { margin: 0; padding: .5rem; border: 1px solid var(--border);
+                   border-radius: 6px; max-width: 100%; }
+  .gallery-state figcaption { color: var(--muted); font-size: .8rem; margin-bottom: .4rem; }
+  .gallery-note { color: var(--muted); margin: 0; }
+  .gallery-table { overflow-x: auto; max-width: 100%; }
+  /* The sheet is position: fixed in the viewer; here it sits in the flow. */
+  #edit-sheet.gallery-sheet { position: static; transform: none; max-height: none;
+                              inset: auto; width: min(100%, 26rem); }
+</style>
+"""
+
+
+def gallery_frame_html(index_html, theme):
+    """The real index.html, pinned to `theme`, with the gallery appended.
+
+    The pin runs after the page's own theme script, which reads the saved
+    choice from localStorage: both frames share one origin and so one
+    saved theme, and would otherwise draw the same palette twice.
+    """
+    if theme not in GALLERY_THEMES:
+        raise ValueError(theme)
+    pin = (f'<script>document.documentElement.dataset.theme = "{theme}";'
+           f'</script>{GALLERY_CSS}</head>')
+    html = index_html.replace("</head>", pin, 1)
+    return html.replace(
+        "</body>", '<script src="/dev/gallery.js"></script>\n</body>', 1)
+
+
+GALLERY_PAGE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Component gallery (demo)</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #888; }
+  /* Side by side only when each frame clears the viewer's 600 px phone
+     breakpoint: below it the table and its editor are not drawn at all.
+     Narrower windows stack the two frames. */
+  .frames { display: grid; gap: 4px;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 44rem), 1fr)); }
+  iframe { border: 0; width: 100%; height: 100vh; }
+</style>
+</head>
+<body>
+<div class="frames">
+  <iframe src="/dev/gallery/frame?theme=light" title="Gallery, light theme"></iframe>
+  <iframe src="/dev/gallery/frame?theme=dark" title="Gallery, dark theme"></iframe>
+</div>
+</body>
+</html>
+"""
+
+
+def add_gallery(app):
+    """/dev/gallery: every component in its states, light and dark side by
+    side (#153). Demo-only: registered here, never by create_app, so
+    neither `serve` nor the LAN viewer has it, and its script lives in
+    scripts/, outside the wheel.
+    """
+    from flask import Response, abort, request, send_file
+
+    @app.get("/dev/gallery")
+    def gallery():
+        return Response(GALLERY_PAGE, mimetype="text/html")
+
+    @app.get("/dev/gallery/frame")
+    def gallery_frame():
+        theme = request.args.get("theme", "light")
+        if theme not in GALLERY_THEMES:
+            abort(404)
+        index = Path(app.static_folder, "index.html").read_text(encoding="utf-8")
+        return Response(gallery_frame_html(index, theme), mimetype="text/html")
+
+    @app.get("/dev/gallery.js")
+    def gallery_js():
+        return send_file(GALLERY_JS, mimetype="text/javascript")
 
 
 def main():
