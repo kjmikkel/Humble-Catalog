@@ -56,7 +56,9 @@ def test_the_gallery_script_is_served(client):
     resp = client.get("/dev/gallery.js")
     assert resp.status_code == 200
     assert resp.mimetype == "text/javascript"
-    assert resp.get_data(as_text=True) == GALLERY_JS.read_text(encoding="utf-8")
+    # Bytes, not text: read_text folds a Windows checkout's CRLF to LF,
+    # while send_file serves the file as it is on disk.
+    assert resp.get_data() == GALLERY_JS.read_bytes()
 
 
 def test_the_real_viewer_has_no_gallery(tmp_path):
