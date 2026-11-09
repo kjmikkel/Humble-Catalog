@@ -131,9 +131,13 @@ function taskMessage(text) {
   if (el) el.textContent = text || "";
 }
 
-async function startTask(command, options) {
+// `force` is the second click after a "busy" refusal: start even though
+// a run is recorded as active. It goes through here, not a bare post(),
+// so a refused forced start is reported like any other (#151).
+async function startTask(command, options, force = false) {
   taskMessage("");
-  const resp = await post("/api/jobs/start", {command, options});
+  const resp = await post("/api/jobs/start",
+                          force ? {command, options, force: true} : {command, options});
   if (resp.status === 409) {
     // The one refusal with a second answer available: a run recorded as
     // active may simply be stale, so offer force rather than dead-ending.
@@ -171,8 +175,7 @@ if (typeof document !== "undefined" && document.addEventListener) {
     // page can say so before it happens.
     armOrFire(btn, async () => {
       if (await startTask(command, options) === "busy")
-        armOrFire(btn, () => post("/api/jobs/start",
-                                  {command, options, force: true}));
+        armOrFire(btn, () => startTask(command, options, true));
     });
   });
 }
