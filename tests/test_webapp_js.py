@@ -2810,13 +2810,13 @@ def _driven(items_json, body):
             }})()""")
 
 
-def test_a_phone_card_is_a_button_that_opens_the_editor():
+def test_a_phone_card_has_a_button_that_opens_the_editor():
     # The cards were display-only -- "editing needs the table's width" --
     # so a phone could not set the two fields a phone is actually for.
+    # Since #149 the control is the title button, not the card itself.
     items = json.dumps([_item(id=1, name="A Quiet Life in Harbors")])
     html = _driven(items, "return app.renderCards(app.getItems());")
-    assert 'role="button"' in html
-    assert 'data-open="1"' in html
+    assert '<button type="button" class="card-title card-open" data-open="1"' in html
 
 
 def test_the_lan_viewers_cards_stay_display_only():

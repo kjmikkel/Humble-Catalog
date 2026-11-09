@@ -860,23 +860,31 @@ function renderCards(rows, mark = () => "") {
       ? ` · ${esc(i.series)}${i.series_number ? " #" + i.series_number : ""}` : "";
     const rating = i.my_rating ? ` · ${"★".repeat(i.my_rating)}` : "";
     const tags = (i.user_tags || []).length ? ` · ${esc(i.user_tags.join(", "))}` : "";
-    // The card itself is the control, rather than carrying two of its
-    // own: status and stars on every card face cost about 90 px each and
-    // roughly halve how much library fits on a screen, which is what the
-    // phone is mostly for. Measured both ways before choosing (#45).
-    const opens = READ_ONLY ? "" :
-      ` role="button" tabindex="0" data-open="${i.id}"` +
-      ` aria-label="Edit ${esc(i.name)}"`;
-    // A tappable card is already a Tab stop, so it only needs the marker;
-    // a read-only one takes tabindex="-1" with it, like a table row.
-    const marked = mark(idx) && !READ_ONLY ? " data-revealed" : mark(idx);
-    return `<article class="card${READ_ONLY ? "" : " tappable"}"${opens}${marked}>
+    // The whole card opens the sheet, rather than carrying two controls
+    // of its own: status and stars on every card face cost about 90 px
+    // each and roughly halve how much library fits on a screen, which is
+    // what the phone is mostly for. Measured both ways before choosing (#45).
+    //
+    // The control is the title, a real <button>, and not the <article>:
+    // a card exposed as a button held the bundle links, and interactive
+    // content inside a button is forbidden (HTML-ARIA, A11Y-9; #149). The
+    // button's ::after stretches over the card, so a tap anywhere still
+    // opens it, and the links sit above that overlay as its siblings.
+    const title = highlight(i.name, matchSpans.get(i.id));
+    // The button is the Tab stop, so on a tappable card the reveal marker
+    // goes there; a read-only card takes tabindex="-1" with it, like a
+    // table row.
+    const heading = READ_ONLY
+      ? `<strong class="card-title">${title}</strong>`
+      : `<button type="button" class="card-title card-open" data-open="${i.id}"
+           aria-label="Edit ${esc(i.name)}"${mark(idx) ? " data-revealed" : ""}>${title}</button>`;
+    return `<article class="card${READ_ONLY ? "" : " tappable"}"${READ_ONLY ? mark(idx) : ""}>
     ${READ_ONLY ? "" : '<span class="card-chevron" aria-hidden="true">&rsaquo;</span>'}
     ${i.cover_path
       ? `<img class="card-cover" src="/${i.cover_path}" alt="" loading="lazy">`
       : ""}
     <div class="card-body">
-      <strong class="card-title">${highlight(i.name, matchSpans.get(i.id))}</strong>
+      ${heading}
       <div class="card-meta">${esc((i.authors || []).join(", "))}${series}</div>
       <div class="card-meta"><span class="tag">${esc(i.type)}</span> ${esc((i.formats || []).join(", "))}</div>
       <div class="card-meta">${status}${rating}${tags}</div>
@@ -966,7 +974,7 @@ function closeSheet() {
   }, 220);
   // Same reason as above: the card may have scrolled out of view while
   // the sheet was open, and returning focus must not drag the list back.
-  document.querySelector(`.card[data-open="${id}"]`)?.focus({preventScroll: true});
+  document.querySelector(`.card-open[data-open="${id}"]`)?.focus({preventScroll: true});
 }
 
 // The two writes. Separate functions rather than inline in the click
@@ -1499,10 +1507,9 @@ document.addEventListener("click", async (ev) => {
     await setSheetRating(+b.dataset.id, +b.dataset.n);
   } else if (el.closest && (el.closest(".sheet-done") || el.id === "sheet-scrim")) {
     closeSheet();
-  } else if (el.closest && el.closest("[data-open]")
-             && !el.closest(".card-link")) {
-    // The bundle links inside a card stay links: tapping one should open
-    // the bundle page, not the editor.
+  } else if (el.closest && el.closest("[data-open]")) {
+    // A tap anywhere on a card lands on its title button through the
+    // stretched ::after; the bundle links sit above it and stay links.
     openSheet(+el.closest("[data-open]").dataset.open);
   } else if (el.id === "restore-reset") {
     startFresh();
@@ -1690,11 +1697,9 @@ document.addEventListener("keydown", (ev) => {
     return;
   }
   if (ev.key === "Escape" && openSheetId !== null) { closeSheet(); return; }
-  if (ev.key !== "Enter" && ev.key !== " ") return;
-  const card = ev.target.closest?.("[data-open]");
-  if (!card) return;
-  ev.preventDefault();
-  openSheet(+card.dataset.open);
+  // No Enter/Space case for the cards any more: their control is a real
+  // <button> now (#149), which turns both keys into a click by itself, so
+  // handling them here as well would open the sheet twice.
 });
 
 // One render per frame, not one per keystroke. render() rebuilds the whole
