@@ -109,9 +109,15 @@ const query = (sel) => {
   return elCache.get(sel);
 };
 
+// Elements a test hands to document.querySelectorAll, per selector. Empty
+// by default, which is what every older test relied on; a test that needs
+// a header control re-synced (the status chips, which render() never
+// rebuilds) plants them with dom.plantAll and reads them back.
+const planted = {};
+
 const document = {
   querySelector: query,
-  querySelectorAll: () => [],
+  querySelectorAll: (sel) => planted[sel] || [],
   addEventListener() {},
   createElement: () => makeEl("created"),
 };
@@ -170,7 +176,7 @@ const publish = `
   SECTIONS, currentSection, showSection,
   renderBadges, badgeCount,
   toggleSidebar, sidebarCollapsed, applySidebar, renderActiveFilters,
-  clearAllFilters, emptyStateText,
+  clearAllFilters, emptyStateText, syncStatusChips, setOnlyStatus,
   setPending: (v) => { pending = {...pending, ...v}; },
   getPending: () => pending,
   loadKeys, renderKeys, shownKeys, KEY_STATES, setKeyStates,
@@ -234,7 +240,10 @@ const runner = `
 `;
 
 sandbox.__dom = { writes, focused, focusCalls,
+  plantAll: (sel, datasets) =>
+    (planted[sel] = datasets.map((d, n) => Object.assign(makeEl(`${sel}#${n}`), {dataset: d}))),
   reset: () => { for (const k of Object.keys(writes)) delete writes[k];
+                 for (const k of Object.keys(planted)) delete planted[k];
                  focused.length = 0; focusCalls.length = 0; } };
 
 const result = await vm.runInContext(runner, sandbox);

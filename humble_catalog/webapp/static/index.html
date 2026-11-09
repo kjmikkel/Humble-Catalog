@@ -68,12 +68,12 @@
       <option value="notes">Has notes</option>
       <option value="mytags">Has my tags</option>
       <option value="override">Queued for re-enrich</option></select>
-    <span id="status-filter" aria-label="Filter by reading status">
-      <button type="button" class="status-chip" data-status="want_to_read">Want to read</button>
-      <button type="button" class="status-chip" data-status="unread">Unread</button>
-      <button type="button" class="status-chip" data-status="reading">Reading</button>
-      <button type="button" class="status-chip" data-status="read">Read</button>
-      <button type="button" class="status-chip" data-status="dnf">DNF</button>
+    <span id="status-filter" role="group" aria-label="Filter by reading status">
+      <button type="button" class="status-chip" data-status="want_to_read" aria-pressed="false">Want to read</button>
+      <button type="button" class="status-chip" data-status="unread" aria-pressed="false">Unread</button>
+      <button type="button" class="status-chip" data-status="reading" aria-pressed="false">Reading</button>
+      <button type="button" class="status-chip" data-status="read" aria-pressed="false">Read</button>
+      <button type="button" class="status-chip" data-status="dnf" aria-pressed="false">DNF</button>
     </span>
   </div>
   </aside>
