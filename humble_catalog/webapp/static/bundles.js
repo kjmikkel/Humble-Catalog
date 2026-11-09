@@ -129,6 +129,19 @@ function selectBrowseKind(kind) {
   if (BROWSE_KINDS.some(([k]) => k === kind)) browseKind = kind;
   renderBrowse();
 }
+
+// The name filter (#140): a case-insensitive substring of the bundle's
+// name, applied before the kind split so each kind's count says where the
+// matches are. Kept across redraws like browseKind, never across sessions
+// -- a stale filter would silently hide bundles. Its box sits outside
+// #browse-panel, whose innerHTML is rebuilt on every redraw: inside it,
+// each keystroke would replace the box and lose focus and caret.
+let browseFilter = "";
+
+function filterBrowse(text) {
+  browseFilter = String(text || "").trim().toLowerCase();
+  renderBrowse();
+}
 const headlines = new Map();   // bundle URL -> {owned, new}
 const HUMBLE_PAGE = /^https:\/\/(www\.)?humblebundle\.com\//i;
 
@@ -145,6 +158,8 @@ async function browseBundles() {
 function renderBrowse() {
   const panel = $("#browse-panel");
   if (!panel) return;
+  const box = $("#browse-filter");
+  if (box) box.hidden = true;
   panel.hidden = !liveBundles && !liveBundlesError;
   if (panel.hidden) return;
   if (liveBundlesError) {
@@ -153,11 +168,15 @@ function renderBrowse() {
   }
   // Second guard on what Humble sent: the server kept only bundle-page
   // paths, and a row that is not a Humble https page is not offered at all.
-  const shown = liveBundles.filter((b) => HUMBLE_PAGE.test(b.url || ""));
-  if (!shown.length) {
+  const live = liveBundles.filter((b) => HUMBLE_PAGE.test(b.url || ""));
+  if (!live.length) {
     panel.innerHTML = "<p>Humble lists no live bundles right now.</p>";
     return;
   }
+  if (box) box.hidden = false;
+  const shown = browseFilter
+    ? live.filter((b) => String(b.name || "").toLowerCase().includes(browseFilter))
+    : live;
   const ends = (iso) => {
     const d = new Date(iso);
     return isNaN(d) ? "" : d.toLocaleDateString(undefined, {dateStyle: "medium"});
@@ -170,6 +189,8 @@ function renderBrowse() {
     const rows = shown.filter((b) => b.kind === kind);
     if (!rows.length) {
       const noun = BROWSE_KINDS.find(([k]) => k === kind)[2];
+      if (browseFilter)
+        return `<p>No live ${noun} bundles match “${esc(browseFilter)}”.</p>`;
       return `<p>Humble lists no live ${noun} bundles right now.</p>`;
     }
     return `<table class="browse-list"><tbody>` + rows.map((b) => {
@@ -188,6 +209,7 @@ function renderBrowse() {
 }
 
 $("#browse-go").addEventListener("click", () => browseBundles());
+$("#browse-filter").addEventListener("input", (ev) => filterBrowse(ev.target.value));
 $("#browse-panel").addEventListener("click", (ev) => {
   if (ev.target.closest && ev.target.closest(".report-back")) return;
   const kind = ev.target.closest && ev.target.closest(".browse-kind");
