@@ -48,6 +48,31 @@ async function fetchReport(url, body, fallback) {
                  || `${fallback} (the viewer answered ${resp.status})`};
 }
 
+// Say a check's outcome on the report pane's live regions (#148): an
+// error to the alert, anything else to the status. Each call replaces
+// both, so a stale sentence is never re-read on the next change.
+function announceBundles(error, status) {
+  const alert = $("#bundles-alert"), stat = $("#bundles-status");
+  if (alert) alert.textContent = error || "";
+  if (stat) stat.textContent = error ? "" : (status || "");
+}
+
+// A new check or browse retires every error on screen (#148). The old
+// one is about a request that is over; left up, it sat beside the next
+// check's "Checking..." as if it were that check's answer. Reports stay:
+// the latest result replaces them when it arrives.
+function clearBundleErrors(status) {
+  bundlePreviewError = null;
+  liveBundlesError = null;
+  choicePreviewError = null;
+  const msg = $("#bundle-url-msg");
+  if (msg) msg.textContent = "";
+  renderBundlePreview();
+  renderBrowse();
+  renderChoicePreview();
+  announceBundles(null, status);
+}
+
 // Runs `work` with its button disabled and saying so (#89). A Choice
 // check drives a logged-in fetch and takes seconds, and with no sign of
 // it the page looked dead -- and a second click sent a second request.
@@ -70,11 +95,13 @@ async function previewBundle(url) {
   // POST, never GET: a bundle URL in a query string reaches access logs
   // and browser history.
   await whileChecking("#bundle-go", "Check bundle", async () => {
+    clearBundleErrors("Checking the bundle…");
     const {report, error} = await fetchReport(
       "/api/bundle-preview", {url}, "could not read that bundle");
     bundlePreview = report || null;
     bundlePreviewError = error || null;
     renderBundlePreview();
+    announceBundles(error, report && `Bundle report ready: ${report.name}`);
     // One report at a time on the right (#136): the latest check wins.
     if (report || error) {
       shownBundleUrl = report ? url : null;
@@ -147,11 +174,15 @@ const HUMBLE_PAGE = /^https:\/\/(www\.)?humblebundle\.com\//i;
 
 async function browseBundles() {
   await whileChecking("#browse-go", "Browse current bundles", async () => {
+    clearBundleErrors("Reading Humble's current bundles…");
     const {report, error} = await fetchReport(
       "/api/live-bundles", {}, "could not read Humble's current bundles");
     liveBundles = report ? (report.bundles || []) : null;
     liveBundlesError = error || null;
     renderBrowse();
+    // The count renderBrowse draws: only rows that are Humble pages.
+    const n = (liveBundles || []).filter((b) => HUMBLE_PAGE.test(b.url || "")).length;
+    announceBundles(error, `${n} current ${n === 1 ? "bundle" : "bundles"} listed`);
   });
 }
 
@@ -516,9 +547,20 @@ function renderBundlePreview() {
     (ev) => { bundlePreviewOpen = ev.target.open; });
 }
 
-$("#bundle-go").addEventListener("click", () => {
+// Check bundle, by click or Enter. An empty field gets an answer beside
+// it (#148) rather than nothing: every submit gets a response (FEEDBACK-1).
+function submitBundleUrl() {
   const url = $("#bundle-url").value.trim();
-  if (url) previewBundle(url);
+  if (!url) {
+    $("#bundle-url-msg").textContent = "Paste a HumbleBundle URL first.";
+    $("#bundle-url").focus();
+    return;
+  }
+  return previewBundle(url);
+}
+$("#bundle-go").addEventListener("click", () => submitBundleUrl());
+$("#bundle-url").addEventListener("input", () => {
+  $("#bundle-url-msg").textContent = "";
 });
 $("#bundle-url").addEventListener("keydown", (ev) => {
   if (ev.key === "Enter") $("#bundle-go").click();
@@ -552,6 +594,7 @@ let choicePreviewOpen = true;
 
 async function previewChoice() {
   await whileChecking("#choice-go", "Check", async () => {
+    clearBundleErrors("Checking this month's Choice…");
     const {report, error} = await fetchReport(
       "/api/choice-preview", {}, "could not read this month's Choice");
     choicePreview = report || null;
@@ -564,6 +607,7 @@ async function previewChoice() {
     renderBrowse();
     renderChoicePreview();
     showReport("#choice-panel");
+    announceBundles(error, report && "This month's Choice report ready");
   });
 }
 

@@ -177,9 +177,13 @@
         <h3>A bundle</h3>
         <div class="bundle-url-row">
           <input id="bundle-url" aria-label="Humble bundle URL to preview" type="url"
+                 aria-describedby="bundle-url-msg"
                  placeholder="Paste a HumbleBundle page URL">
           <button id="bundle-go">Check bundle</button>
         </div>
+        <!-- Beside the field it is about, and a live region from first
+             paint (A11Y-7): an empty Check used to do nothing at all. -->
+        <p id="bundle-url-msg" class="field-msg" role="alert"></p>
         <div id="bundle-recent" hidden></div>
         <div class="browse-row">
           <button id="browse-go" class="browse-go">Browse current bundles</button>
@@ -205,6 +209,13 @@
       <div id="bundle-panel" hidden></div>
       <div id="choice-panel" hidden></div>
     </div>
+    <!-- The report pane's spoken channel (#148), on the #table-status
+         pattern: the panels above are redrawn by replacing their HTML, and
+         a live region inserted along with its text is not reliably
+         announced. Errors go to the alert, results and progress to the
+         status; bundles.js writes the sentence the panel shows. -->
+    <p id="bundles-alert" class="visually-hidden" role="alert"></p>
+    <p id="bundles-status" class="visually-hidden" role="status"></p>
   </section>
 
   <section id="section-tasks" hidden>

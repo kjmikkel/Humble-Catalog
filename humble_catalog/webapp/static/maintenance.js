@@ -31,7 +31,7 @@ async function loadReview() {
           <input type="url" class="url-box" data-id="${r.id}"
                  placeholder="...or paste a source URL (any product page; APIs for Comic Vine, Hardcover, Open Library, Audible, Google Books, O'Reilly)">
           <button class="url-fetch" data-id="${r.id}">Fetch</button>
-          <span class="url-result" data-id="${r.id}"></span>
+          <span class="url-result" role="status" data-id="${r.id}"></span>
         </div>
       </div>
     </div>`).join("")}</details>`;
@@ -162,11 +162,21 @@ document.addEventListener("click", async (ev) => {
     const id = el.dataset.id;
     const box = document.querySelector(`.url-box[data-id="${id}"]`);
     const result = document.querySelector(`.url-result[data-id="${id}"]`);
+    // role="status" on the span, which is drawn empty with its row, so
+    // "Fetching...", the error and the Apply offer are all announced
+    // (#148). A failure of any kind lands here too, never a silent throw.
     result.textContent = "Fetching...";
-    const resp = await post(`/api/items/${id}/fetch_url`, {url: box.value.trim()});
-    const data = await resp.json();
-    if (!resp.ok) {
-      result.textContent = data.error || "Could not fetch that URL.";
+    let resp, data = {};
+    try {
+      resp = await post(`/api/items/${id}/fetch_url`, {url: box.value.trim()});
+    } catch (err) {
+      if (!(err instanceof TypeError)) throw err;
+      result.textContent = "Couldn't fetch: the viewer isn't reachable.";
+      return;
+    }
+    try { data = await resp.json(); } catch { /* not JSON */ }
+    if (!resp.ok || !data.candidate) {
+      result.textContent = data.error || `Could not fetch that URL (HTTP ${resp.status}).`;
       return;
     }
     const c = data.candidate;
