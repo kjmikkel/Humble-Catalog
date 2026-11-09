@@ -4605,6 +4605,65 @@ def test_a_row_is_only_linked_to_a_humble_page():
     assert "href=" not in html
 
 
+# -- Filtering the live list (#140) ---------------------------------------
+# Inside a kind every live bundle was listed, so finding one meant reading
+# every name in a 40vh box. A text box narrows it by name.
+
+_LIVE_MORE = _LIVE + [
+    {"kind": "books", "name": "Humble Book Bundle: Starship Engineering",
+     "url": "https://www.humblebundle.com/books/starship-engineering-books",
+     "ends": "2026-10-09T18:00:00"},
+]
+
+
+def test_the_filter_keeps_only_names_that_contain_it():
+    html = _browse(_LIVE_MORE, then='app.filterBrowse("starship");')["html"]
+    assert _LIVE_MORE[2]["url"] in html and _LIVE_MORE[0]["url"] not in html
+
+
+def test_the_filter_ignores_case_and_surrounding_space():
+    html = _browse(_LIVE_MORE, then='app.filterBrowse("  EXAMPLIA ");')["html"]
+    assert _LIVE_MORE[0]["url"] in html and _LIVE_MORE[2]["url"] not in html
+
+
+def test_the_counts_follow_the_filter():
+    # A match in the other kind shows up in its count, not silently hidden.
+    kinds = _kinds(_browse(_LIVE_MORE, then='app.filterBrowse("widget");')["html"])
+    assert "Books (0)" in kinds and "Games (1)" in kinds
+
+
+def test_no_match_says_so_and_names_the_filter():
+    html = _browse(_LIVE_MORE, then='app.filterBrowse("<nothing>");')["html"]
+    assert "No live book bundles match" in html
+    assert "&lt;nothing&gt;" in html and "<nothing>" not in html
+    assert "right now" not in html
+
+
+def test_the_filter_survives_a_redraw_and_clears():
+    html = _browse(_LIVE_MORE, then='app.filterBrowse("starship"); app.renderBrowse();')["html"]
+    assert _LIVE_MORE[0]["url"] not in html
+    html = _browse(_LIVE_MORE, then='app.filterBrowse("starship"); app.filterBrowse("");')["html"]
+    assert _LIVE_MORE[0]["url"] in html and _LIVE_MORE[2]["url"] in html
+
+
+def test_the_filter_box_shows_only_with_the_list():
+    got = eval_js("""(async () => {
+      dom.reset();
+      app.resetBrowse();
+      const box = document.querySelector("#browse-filter");
+      box.hidden = true;
+      app.setFetch(() => Promise.resolve({ok: false, status: 502,
+        json: () => Promise.resolve({error: "down"})}));
+      await app.browseBundles();
+      const onError = box.hidden;
+      app.setFetch(() => Promise.resolve({ok: true,
+        json: () => Promise.resolve({bundles: %s})}));
+      await app.browseBundles();
+      return {onError, onList: box.hidden};
+    })()""" % json.dumps(_LIVE))
+    assert got == {"onError": True, "onList": False}
+
+
 
 # -- The two-pane Bundles page (#136) -------------------------------------
 
