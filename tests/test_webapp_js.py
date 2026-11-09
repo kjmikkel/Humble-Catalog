@@ -3134,8 +3134,10 @@ def test_a_write_that_never_arrives_puts_the_rating_back():
     # Optimism is only honest if it is undone when the write fails: the
     # row must not keep showing a rating the server never took.
     items = json.dumps([_item(id=1, my_rating=2)])
+    # A TypeError, as a browser's fetch rejects for an unreachable server:
+    # saved() reports only that, so other errors still surface as bugs.
     out = _driven(items, """
-      app.setFetch(() => Promise.reject(new Error("offline")));
+      app.setFetch(() => Promise.reject(new TypeError("offline")));
       await app.applyRating(1, 4, 4);
       return app.getItems()[0].my_rating;""")
     assert out == 2
@@ -4758,6 +4760,92 @@ def test_a_blocked_store_leaves_the_box_unticked_and_quiet():
       finally { globalThis.localStorage = real; }
     })()""")
     assert got is False
+
+
+# ---- Failed writes are reported, not shown as saved (#142) ---------------
+# post() resolves on any HTTP status and rejects only when the server is
+# unreachable, so a caller that just awaited it showed a refused or lost
+# write exactly like a saved one.
+
+_UNREACHABLE = 'app.setFetch(() => Promise.reject(new TypeError("Failed to fetch")));'
+_REFUSED = ('app.setFetch(() => Promise.resolve({ok: false, status: 500, '
+            'json: () => Promise.resolve({error: "database is locked"})}));')
+_ERROR_TEXT = 'dom.writes["#write-error:text"]'
+
+
+def test_a_refused_rating_is_put_back_and_the_reason_shown():
+    items = json.dumps([_item(id=1, my_rating=2)])
+    out = _driven(items, _REFUSED + """
+      await app.applyRating(1, 4, 4);
+      return {rating: app.getItems()[0].my_rating, error: %s};""" % _ERROR_TEXT)
+    assert out["rating"] == 2
+    assert "database is locked" in out["error"]
+
+
+def test_an_unreachable_rating_says_the_viewer_is_unreachable():
+    items = json.dumps([_item(id=1, my_rating=2)])
+    out = _driven(items, _UNREACHABLE + """
+      await app.applyRating(1, 4, 4);
+      return {rating: app.getItems()[0].my_rating, error: %s};""" % _ERROR_TEXT)
+    assert out["rating"] == 2
+    assert "isn't reachable" in out["error"]
+
+
+def test_a_status_change_that_never_arrives_is_put_back():
+    # The case observed in the 2026-11-09 UI/UX pass: the select kept
+    # showing "Reading" and nothing said the change was lost.
+    items = json.dumps([_item(id=1, read_status="unread")])
+    out = _driven(items, _UNREACHABLE + """
+      await app.applyStatus(1, "reading");
+      return {status: app.getItems()[0].read_status, error: %s};""" % _ERROR_TEXT)
+    assert out["status"] == "unread"
+    assert "isn't reachable" in out["error"]
+
+
+def test_a_status_change_that_is_saved_is_kept():
+    items = json.dumps([_item(id=1, read_status="unread")])
+    out = _driven(items, """
+      await app.applyStatus(1, "reading");
+      return {status: app.getItems()[0].read_status, posts};""")
+    assert out["status"] == "reading"
+    assert out["posts"] == [{"url": "/api/items/1/read-status",
+                             "body": {"status": "reading"}}]
+
+
+def test_a_refused_sheet_status_and_rating_are_not_kept():
+    items = json.dumps([_item(id=1, read_status="unread", my_rating=None)])
+    out = _driven(items, _REFUSED + """
+      await app.setSheetStatus(1, "read");
+      await app.setSheetRating(1, 5);
+      const i = app.getItems()[0];
+      return {status: i.read_status, rating: i.my_rating, error: %s};""" % _ERROR_TEXT)
+    assert out["status"] == "unread"
+    assert out["rating"] is None
+    assert "database is locked" in out["error"]
+
+
+def test_a_saved_write_clears_an_earlier_error():
+    items = json.dumps([_item(id=1, my_rating=2)])
+    out = _driven(items, _UNREACHABLE + """
+      await app.applyRating(1, 4, 4);
+      const before = %s;
+      app.setFetch(() => Promise.resolve({ok: true, json: () => Promise.resolve({})}));
+      await app.applyRating(1, 4, 4);
+      return {before, after: %s};""" % (_ERROR_TEXT, _ERROR_TEXT))
+    assert out["before"]
+    assert out["after"] == ""
+
+
+def test_a_bug_in_a_write_is_not_swallowed_as_a_failed_save():
+    # Only the two ways a save can fail are reported; a programming error
+    # must still surface as one.
+    items = json.dumps([_item(id=1)])
+    err = eval_js_error("""(async () => {
+      app.setItems(%s);
+      app.setFetch(() => { throw new RangeError("a bug"); });
+      await app.saved("/api/items/1/rating", {rating: 1});
+    })()""" % items)
+    assert err == "RangeError: a bug"
 
 
 # ---- #146: the inline editor keeps the keyboard where it was ------------
