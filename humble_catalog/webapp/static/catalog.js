@@ -1433,11 +1433,13 @@ function statRow(key, row, genre) {
   // A zero row renders greyed and unclickable, so the panel doubles as a
   // "this category is clean" confirmation rather than hiding the row.
   const cell = row.count
-    // The count alone is the visible label; the name keeps it (label in
-    // name) and says what pressing it shows.
+    // The count alone is the visible label; the name starts with it (label
+    // in name, WCAG 2.5.3, and the visible-word-first rule of A11Y-1) and
+    // then says what pressing it shows. "Show E-books (6)" kept the count
+    // only in parentheses at the end, which axe flagged (#152).
     ? `<button class="stat-jump" data-section="${esc(key)}"
         data-row="${esc(row.label)}"
-        aria-label="Show ${esc(row.label)} (${row.count})">${row.count}</button>`
+        aria-label="${row.count}: show ${esc(row.label)}">${row.count}</button>`
     : `<span class="stat-zero">0</span>`;
   const manage = genre && tagEditMode && !READ_ONLY
     ? `<td><input class="genre-rename-input" placeholder="rename to..." size="18">

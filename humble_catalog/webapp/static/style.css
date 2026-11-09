@@ -264,6 +264,10 @@ mark { background: var(--mark-bg); color: var(--mark-fg);
    the same trap the statistics panel's jump counts fell into. */
 .badge.edition { background: var(--badge-info); color: var(--badge-info-fg); border: 0; cursor: pointer;
                  font: inherit; font-size: .7rem; padding: 0 .3rem; }
+/* 24 px: the WCAG 2.5.8 minimum target (#152). The editor's single-line
+   fields, the merge pickers and the summaries drew shorter than that. */
+.edit-field, .dupe-pick input, .dupe-pick button { min-height: 24px; }
+#dupes-panel summary, #review-panel summary { min-height: 24px; }
 .edit-field { width: 95%; box-sizing: border-box; }
 .edit-num { width: 3.5em; margin-top: .2rem; }
 .url-import { margin-top: .4rem; display: flex; gap: .4rem; align-items: center;
@@ -861,7 +865,10 @@ body[data-mode="read-only"] #column-picker { display: none; }
 .sheet-status[aria-pressed="true"] { color: var(--status-on-fg);
                                      border-color: transparent; font-weight: 600; }
 .sheet-status[aria-pressed="true"].rs-want_to_read { background: var(--status-want); }
-.sheet-status[aria-pressed="true"].rs-unread       { background: var(--muted); }
+/* --bg, not --status-on-fg: white on the dark theme's --muted is 2.63:1,
+   the same pair the queued badge had (#147, #152). */
+.sheet-status[aria-pressed="true"].rs-unread       { background: var(--muted);
+                                                     color: var(--bg); }
 .sheet-status[aria-pressed="true"].rs-reading      { background: var(--status-reading); }
 .sheet-status[aria-pressed="true"].rs-read         { background: var(--status-read); }
 .sheet-status[aria-pressed="true"].rs-dnf          { background: var(--status-dnf); }

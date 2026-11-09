@@ -36,3 +36,6 @@ humble_catalog.egg-info/
 # is ignored by .trail/.gitignore; .trail/learnings/ is committed and is
 # scanned by leak_check like any other text.
 graft/
+
+# npm dev tools (package.json): axe-core for the a11y ratchet
+node_modules/
