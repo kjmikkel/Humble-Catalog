@@ -202,6 +202,7 @@ function renderBrowse() {
         <td class="browse-ends">${b.ends ? `ends ${esc(ends(b.ends))}` : ""}</td>
         <td class="browse-headline">${h ? `owned ${h.owned} · new ${h.new}` : ""}</td>
         <td><button class="browse-check" data-url="${esc(b.url)}"
+          aria-label="${h ? "Show" : "Check"}: ${esc(b.name)}"
           >${h ? "Show" : "Check"}</button></td></tr>`;
     }).join("") + `</tbody></table>`;
   };

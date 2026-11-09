@@ -175,7 +175,10 @@ const READ_STATUS_ORDER = Object.fromEntries(READ_STATUS.map(([k], n) => [k, n])
 // on the server anyway. Guards match tagBadges/person.
 function statusSelect(i) {
   const cur = i.read_status || "unread";
-  return `<select class="read-status-select rs-${cur}" data-id="${i.id}">`
+  // Named for its row: a table of these otherwise reads "Unread, combo
+  // box" over and over, with no hint of which item each one sets (#144).
+  return `<select class="read-status-select rs-${cur}" data-id="${i.id}"
+    aria-label="Reading status: ${esc(i.name)}">`
     + READ_STATUS.map(([k, label]) =>
         `<option value="${k}"${k === cur ? " selected" : ""}>${label}</option>`
       ).join("")
@@ -305,11 +308,19 @@ const tagCounts = (accessor) => {
   return counts;
 };
 
+// What the editor's chip fields are called in their buttons' and inputs'
+// names, singular. illustrator is the "Artist" half of Narrator/Artist.
+const CHIP_FIELD_NAMES = {genre: "genre", authors: "author",
+  narrator: "narrator", illustrator: "artist", user_tags: "my tag"};
+
 function chipCell(field) {
+  const name = CHIP_FIELD_NAMES[field] || field;
   return `<td class="ac-wrap">${editingTags[field].map((t, idx) =>
       `<span class="tag">${esc(t)}<button class="tag-x" data-f="${field}"
-             data-i="${idx}" title="Remove">&times;</button></span>`).join("")}
-    <input class="tag-input" data-f="${field}" placeholder="add...">
+             data-i="${idx}" title="Remove"
+             aria-label="Remove ${name}: ${esc(t)}">&times;</button></span>`).join("")}
+    <input class="tag-input" data-f="${field}" placeholder="add..."
+           aria-label="Add ${name}">
   </td>`;
 }
 
@@ -654,7 +665,8 @@ function renderActiveFilters() {
   const out = [];
   const chip = (text, attrs) => out.push(
     `<span class="tag active-filter">${esc(text)}<button class="active-x" ${attrs}
-       title="Clear this filter">&times;</button></span>`);
+       title="Clear this filter"
+       aria-label="Clear filter: ${esc(text)}">&times;</button></span>`);
 
   for (const [id, name] of [["f-type", "Type"], ["f-rating", "Rating"],
                             ["f-flag", "Flag"]]) {
@@ -1190,15 +1202,18 @@ function render() {
     <td>${i.cover_path ? `<img src="/${i.cover_path}" alt="" loading="lazy">` : ""}</td>
     <td><strong>${esc(i.name)}</strong><br>
       <input class="edit-field edit-url" data-f="source_url" type="url"
-             value="${esc(i.source_url)}" placeholder="Source URL"><br>
+             value="${esc(i.source_url)}" placeholder="Source URL"
+             aria-label="Source URL"><br>
       <button class="edit-save" data-id="${i.id}">Save</button>
       <button class="edit-cancel">Cancel</button></td>
     <td>${i.type}</td>
     <td>${statusSelect(i)}</td>
     ${chipCell("genre")}
-    <td><input class="edit-field" data-f="series" value="${esc(i.series)}">
+    <td><input class="edit-field" data-f="series" value="${esc(i.series)}"
+               aria-label="Series">
       <input class="edit-field edit-num" data-f="series_number" type="number"
-             step="any" value="${i.series_number ?? ""}" placeholder="#"></td>
+             step="any" value="${i.series_number ?? ""}" placeholder="#"
+             aria-label="Number in series"></td>
     ${chipCell("authors")}
     ${chipCell(personField(i))}
     <td>${esc(i.publisher)}</td>
@@ -1208,8 +1223,8 @@ function render() {
           i.rating_source})</small>` : ""}</td>
     <td class="stars">${stars(i)}</td>
     ${chipCell("user_tags")}
-    <td><textarea class="edit-comment" rows="2"
-                  placeholder="Notes...">${esc(i.user_comment)}</textarea></td>
+    <td><textarea class="edit-comment" rows="2" placeholder="Notes..."
+                  aria-label="Notes">${esc(i.user_comment)}</textarea></td>
   </tr>` : `<tr${revealed(idx)}>
     <td>${i.cover_path ? `<img src="/${i.cover_path}" alt="" loading="lazy">` : ""}</td>
     <td><strong>${highlight(i.name, matchSpans.get(i.id))}</strong>${nameExtras(i)}</td>
@@ -1377,8 +1392,11 @@ function statRow(key, row, genre) {
   // A zero row renders greyed and unclickable, so the panel doubles as a
   // "this category is clean" confirmation rather than hiding the row.
   const cell = row.count
+    // The count alone is the visible label; the name keeps it (label in
+    // name) and says what pressing it shows.
     ? `<button class="stat-jump" data-section="${esc(key)}"
-        data-row="${esc(row.label)}">${row.count}</button>`
+        data-row="${esc(row.label)}"
+        aria-label="Show ${esc(row.label)} (${row.count})">${row.count}</button>`
     : `<span class="stat-zero">0</span>`;
   const manage = genre && tagEditMode && !READ_ONLY
     ? `<td><input class="genre-rename-input" placeholder="rename to..." size="18">
@@ -1702,8 +1720,8 @@ function renderFilterChips() {
     const input = wrap.querySelector("input");
     input.insertAdjacentHTML("beforebegin", f.chips.map((c, idx) =>
       `<span class="tag">${esc(c)}<button class="tag-x chip-x"
-             data-field="${field}" data-i="${idx}"
-             title="Remove">&times;</button></span>`).join(""));
+             data-field="${field}" data-i="${idx}" title="Remove"
+             aria-label="Remove filter: ${esc(c)}">&times;</button></span>`).join(""));
     // With 0-1 chips the all/any distinction cannot change the result;
     // for a scalar field (one value per item) "all" is unsatisfiable,
     // so the toggle could only ever empty the table.

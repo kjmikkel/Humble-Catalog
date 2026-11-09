@@ -71,7 +71,8 @@ function dupeCard(m, other) {
       ${m.publisher ? `<div>${esc(m.publisher)}</div>` : ""}
       <div><small>${m.bundles.map(esc).join("<br>")}</small></div>
       ${m.my_rating ? `<div>${"★".repeat(m.my_rating)}</div>` : ""}
-      <button class="dupe-keep" data-keep="${m.id}" data-drop="${other.id}">
+      <button class="dupe-keep" data-keep="${m.id}" data-drop="${other.id}"
+              aria-label="Keep this one: ${esc(m.name)}">
         Keep this one</button>
     </div></div>`;
 }

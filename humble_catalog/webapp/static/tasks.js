@@ -105,6 +105,7 @@ function taskCard(c) {
       <button class="task-go"${c.picker === "snapshot" ? ' id="restore-go"' : ""}
               data-command="${esc(c.command)}"${c.handoff ? ' data-handoff="1"' : ""}
               data-options='${esc(JSON.stringify(c.options || {}))}'
+              aria-label="Run: ${esc(c.label)}"
               ${dead ? "disabled" : ""}>Run</button>
     </div>`;
 }
