@@ -701,14 +701,27 @@ function renderActiveFilters() {
 // Each kind clears the CONTROL, not just the state, for the same reason
 // the per-chip handler does: the sidebar has to agree whether it is
 // folded away or not.
+// Draw the status chips from statusFilter: the lit class for the eye and
+// aria-pressed for a screen reader, which the class alone never reached
+// (#145). One place, so the four paths that change the set -- click,
+// clear-all, restore and a jump from the overview -- cannot draw them
+// differently. The chips live in the header, which render() never
+// rebuilds, so each of those paths has to call this itself.
+function syncStatusChips() {
+  for (const chip of document.querySelectorAll(".status-chip")) {
+    const on = statusFilter.has(chip.dataset.status);
+    chip.classList.toggle("on", on);
+    chip.setAttribute("aria-pressed", String(on));
+  }
+}
+
 function clearAllFilters() {
   for (const id of ["f-type", "f-rating", "f-flag"]) {
     const el = $(`#${id}`);
     if (el) el.value = "";
   }
   statusFilter.clear();
-  for (const el of document.querySelectorAll(".status-chip"))
-    el.classList.remove("on");
+  syncStatusChips();
   for (const f of Object.values(chipFilters)) {
     f.chips.length = 0;
     f.text = "";
@@ -904,8 +917,11 @@ function sheetFor(i) {
     <div class="sheet-label" id="sheet-rating-label">My rating</div>
     <div class="sheet-stars" role="group" aria-labelledby="sheet-rating-label">${
       [1, 2, 3, 4, 5].map((n) =>
+        // Pressed on the rating itself only, like the table's radiogroup:
+        // the fill is cumulative, but a reader should hear one rating,
+        // not "pressed" on every star below it (#145).
         `<button type="button" class="sheet-star${rating >= n ? " on" : ""}"
-           data-id="${i.id}" data-n="${n}"
+           data-id="${i.id}" data-n="${n}" aria-pressed="${rating === n}"
            aria-label="${n} star${n === 1 ? "" : "s"}">${rating >= n ? "&#9733;" : "&#9734;"}</button>`).join("")}${
       rating ? `<button type="button" class="sheet-star-clear" data-id="${i.id}"
                   data-n="0">Clear</button>` : ""}</div>
@@ -1070,8 +1086,7 @@ function restoreFilters() {
   $("#f-rating").value = st.rating;
   statusFilter.clear();
   for (const v of st.status) statusFilter.add(v);
-  for (const chip of document.querySelectorAll(".status-chip"))
-    chip.classList.toggle("on", statusFilter.has(chip.dataset.status));
+  syncStatusChips();
   for (const [k, f] of Object.entries(chipFilters)) {
     Object.assign(f, st.chips[k]);
     const input = document.querySelector(`.chip-filter[data-field="${k}"] input`);
@@ -1336,11 +1351,8 @@ const STATUS_VALUES = {"Want to read": "want_to_read", "Unread": "unread",
 function setOnlyStatus(value) {
   statusFilter.clear();
   statusFilter.add(value);
-  // The chips live in the header, which render() never rebuilds, so a jump
-  // that changes the set has to re-sync their classes by hand -- including
-  // lighting the one it selected, not just clearing the others.
-  for (const chip of document.querySelectorAll(".status-chip"))
-    chip.classList.toggle("on", chip.dataset.status === value);
+  // Including lighting the one it selected, not just clearing the others.
+  syncStatusChips();
 }
 
 const GENRE_PREVIEW = 15;
@@ -1565,11 +1577,9 @@ document.addEventListener("click", async (ev) => {
     renderFilterChips();
     render();
   } else if (el.classList.contains("status-chip")) {
-    // The chips live in the header, which render() never rebuilds, so
-    // toggling the class on the clicked button directly is safe.
     const s = el.dataset.status;
     if (statusFilter.has(s)) statusFilter.delete(s); else statusFilter.add(s);
-    el.classList.toggle("on");
+    syncStatusChips();
     render();
   } else if (el.classList.contains("tag-x")) {
     editingTags[el.dataset.f].splice(+el.dataset.i, 1);

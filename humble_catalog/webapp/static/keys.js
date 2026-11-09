@@ -87,8 +87,10 @@ function keyWhen(row) {
 function renderKeys() {
   const rows = shownKeys();
   const counts = keyChipCounts();
-  const chips = KEY_STATES.map((s) => `<button class="key-chip${
-    keyStates.has(s.state) ? " on" : ""}" data-state="${s.state}">${
+  // aria-pressed beside the class: the lit chip alone told a screen
+  // reader nothing about which states are shown (#145).
+  const chips = KEY_STATES.map((s) => `<button type="button" class="key-chip${
+    keyStates.has(s.state) ? " on" : ""}" aria-pressed="${keyStates.has(s.state)}" data-state="${s.state}">${
     esc(s.label)} ${counts[s.state] || 0}</button>`).join("");
   const libraries = Object.entries(keyLibraries).map(
     ([store, info]) => `${esc(store)} ${info.count} (imported ${
@@ -119,7 +121,7 @@ function renderKeys() {
       library, ${rows.length} shown.
       Matching is by title and <strong>approximate</strong>; a revealed key
       was only displayed, which is not the same as activated.</p>
-    <div id="key-chips">${chips}</div>
+    <div id="key-chips" role="group" aria-label="Show keys by state">${chips}</div>
     ${libraries ? `<p class="keys-libraries">Libraries: ${libraries}</p>` : ""}
     ${!rows.length ? `<p class="section-empty">${emptyMessage}${fetchHint}${importHint}</p>` : ""}
     <div id="key-table-wrap"${rows.length ? "" : " hidden"}>
