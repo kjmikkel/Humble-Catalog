@@ -19,6 +19,7 @@ Serves on port 8099 -- deliberately not 8087, which `serve` uses and
 """
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -249,27 +250,61 @@ def seed(db_path):
     conn.close()
 
 
+def demo_db_path(base=None):
+    """Where the demo catalog lives: <base>/humble-catalog-demo/catalog.db.
+
+    Named catalog.db, in a folder of its own, because Tasks -> Run spawns
+    the CLI, which has no --db flag and opens catalog.db in its working
+    directory. The job runner works in the folder holding the viewer's
+    database, so this is what keeps a demo job on the demo (#143). base
+    defaults to the system temp directory: never beside the real
+    catalog.db, and never inside the repo, where a stray copy would sit
+    outside .gitignore's rules.
+    """
+    folder = Path(base or tempfile.gettempdir()) / "humble-catalog-demo"
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _check_private(folder)
+    return folder / "catalog.db"
+
+
+def _check_private(folder):
+    """Refuse a demo folder someone else could have prepared.
+
+    On Linux and macOS the temp directory is shared, so the fixed name can
+    already exist, made by another user. Jobs run in this folder and the
+    viewer serves its catalog, so it must be ours and writable by no one
+    else. Windows gives every user a temp directory of their own, and its
+    permissions do not map onto these bits, so there is nothing to check.
+    """
+    if not hasattr(os, "getuid"):
+        return
+    st = folder.stat()
+    if st.st_uid != os.getuid() or st.st_mode & 0o022:
+        raise SystemExit(
+            f"{folder} is not a private folder of yours (owner or "
+            "permissions). Remove it, or move it aside, and run the demo "
+            "again.")
+
+
 def make_app(db_path):
     """The demo viewer, with every data directory pointed away from the
-    real ones beside catalog.db.
+    real ones beside the repo's catalog.db.
 
     covers_dir is the committed invented covers, never the real covers/.
-    backups_dir is a directory that does not exist, never ./backups: the
-    demo runs from the repo root, and the Tasks tab's restore picker
-    would otherwise list the real snapshots -- their dates and sizes in
-    frame in any screenshot.
+    backups_dir is backups/ beside the demo catalog -- where a backup job
+    run from the demo writes -- never ./backups: the demo runs from the
+    repo root, and the Tasks tab's restore picker would otherwise list the
+    real snapshots, their dates and sizes in frame in any screenshot.
     """
     return create_app(
         db_path=str(db_path), covers_dir=str(COVERS_DIR),
-        backups_dir=str(Path(tempfile.gettempdir())
-                        / "humble-catalog-demo-backups"))
+        backups_dir=str(Path(db_path).resolve().parent / "backups"))
 
 
 def main():
-    # A fixed name inside the system temp directory: stable enough to
-    # reopen between runs, and never beside catalog.db, where a stray
-    # demo.db would sit outside .gitignore's `catalog.db*` rule.
-    db_path = Path(tempfile.gettempdir()) / "humble-catalog-demo.db"
+    # A fixed folder inside the system temp directory: stable enough to
+    # reopen between runs. See demo_db_path for why the file is catalog.db.
+    db_path = demo_db_path()
     seed(db_path)
     print(f"Demo catalog: {db_path}")
     print(f"Serving {len(DEMO_ROWS)} invented items and "

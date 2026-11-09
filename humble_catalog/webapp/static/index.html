@@ -21,6 +21,10 @@
     <button id="theme-toggle" type="button" title="Toggle light/dark"
             aria-label="Toggle light/dark theme">☾</button></h1>
   <div id="run-banner" hidden></div>
+  <!-- A write that did not stick (#142). Present from first paint and
+       never hidden, for the reason #table-status gives below: only its
+       text changes. Empty, it takes no space. -->
+  <p id="write-error" role="alert"></p>
   <div id="search-row">
     <label id="search-label" for="search">Search</label>
     <span id="search-wrap" class="ac-wrap"><input id="search" type="search" placeholder="Name..." autofocus></span>

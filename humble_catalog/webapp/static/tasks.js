@@ -488,7 +488,9 @@ async function uploadSheet(file) {
 if (typeof document !== "undefined" && document.addEventListener) {
   document.addEventListener("click", async (ev) => {
     if (ev.target && ev.target.id === "job-cancel") {
-      await post("/api/jobs/cancel");
+      // Polled either way: a refused cancel is reported, and the panel
+      // still has to show whether the job is running.
+      await saved("/api/jobs/cancel");
       await pollJobs();
     }
   });
