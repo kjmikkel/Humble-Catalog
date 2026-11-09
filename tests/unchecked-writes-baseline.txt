@@ -1,0 +1,17 @@
+# Known writes whose result the viewer does not check (#151).
+#
+# tests/test_unchecked_writes.py fails on any post() in
+# humble_catalog/webapp/static/*.js whose result is thrown away, or
+# assigned but never checked (.ok or .status) within a few lines -- unless
+# it is listed here. It also fails on a line here that no longer occurs,
+# so this file only shrinks and every fix shows.
+#
+# The fix is almost always app.js's saved(), which reports a refused or
+# lost write on the page (#142). List a case here only when it really
+# cannot be checked, and say why.
+#
+# Format, one per line:
+#   file | enclosing function | route | issue | reason
+# Keyed by function and route, not line number, so unrelated edits to the
+# file do not churn it. Empty at the start: #142 fixed the 13 the UI/UX
+# pass counted, and #151 fixed the one it missed (the forced job start).
