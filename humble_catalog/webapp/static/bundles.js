@@ -177,10 +177,7 @@ function renderBrowse() {
   const shown = browseFilter
     ? live.filter((b) => String(b.name || "").toLowerCase().includes(browseFilter))
     : live;
-  const ends = (iso) => {
-    const d = new Date(iso);
-    return isNaN(d) ? "" : d.toLocaleDateString(undefined, {dateStyle: "medium"});
-  };
+  const ends = isoDate;
   const switcher = `<div class="browse-kinds" role="group" aria-label="Kind of bundle">${
     BROWSE_KINDS.map(([kind, label]) => `<button class="browse-kind"
       data-kind="${kind}" aria-pressed="${kind === browseKind}"
@@ -334,11 +331,7 @@ function renderRecentBundles() {
   if (!el) return;
   const list = loadRecentBundles();
   el.hidden = list.length === 0;
-  const when = (iso) => {
-    const d = new Date(iso);
-    return isNaN(d) ? "" : d.toLocaleString(undefined,
-      {dateStyle: "medium", timeStyle: "short"});
-  };
+  const when = isoDateTime;
   el.innerHTML = list.length ? `<span class="bundle-recent-label">Recent:</span>
     <ul>${list.map((r) => `<li><button class="bundle-recent-go"
       data-recent-url="${esc(r.url)}" title="${esc(r.url)}">${esc(r.name)}</button>

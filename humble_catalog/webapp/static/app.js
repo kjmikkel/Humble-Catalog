@@ -108,6 +108,27 @@ function esc(v) {
     (ch) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[ch]));
 }
 
+// Dates as ISO 8601, in local time (I18N-1, #156): "2026-11-09", and
+// "2026-11-09 08:49" when the time matters. Never the browser locale: a
+// Danish locale put "9. nov. 2026" inside an English page, and Keys
+// already printed ISO dates, so two sections disagreed. Built by hand
+// rather than with toISOString(), which is UTC and would move a late
+// evening onto the next day. Anything unparseable reads as "".
+const pad2 = (n) => String(n).padStart(2, "0");
+function toDate(value) {
+  if (value == null || value === "") return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return isNaN(d) ? null : d;
+}
+function isoDate(value) {
+  const d = toDate(value);
+  return d ? `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}` : "";
+}
+function isoDateTime(value) {
+  const d = toDate(value);
+  return d ? `${isoDate(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : "";
+}
+
 // Two-click confirmation: first click arms the button, second click (within
 // 3 s) fires. Prevents one stray click from mis-attributing an item.
 //
