@@ -4,7 +4,14 @@
   --fg: #222; --muted: #667;
   --border: #e6e6e6; --border-strong: #bbb;
   --accent: #558; --accent-strong: #225;
-  --danger: #d9534f; --star: #f0a500; --badge-info: #5bc0de;
+  --danger: #c12e2a; --star: #a86f00; --badge-info: #5bc0de;
+  /* Measured against --surface and --surface-alt, the two row colours
+     (#147). Stars: >= 3:1 (WCAG 1.4.11) -- on 4.25/3.84, off 3.70/3.34.
+     Text: >= 4.5:1 (1.4.3) -- --danger is both error text and the
+     badge/armed fill under white, 5.13 at worst either way here;
+     --badge-info-fg on --badge-info 8.5. The dark theme splits the two:
+     its --danger reads well as text but not behind white. */
+  --star-off: #80858f; --badge-danger: var(--danger); --badge-info-fg: #16181c;
   --panel-warn-bg: #fff8e6; --panel-warn-border: #c90;
   --banner-bg: #fff3cd; --banner-border: #ffe08a;
   --tag-bg: #eef; --tag-border: #ccd; --tag-fg: #223;
@@ -20,6 +27,7 @@
     --border: #2c3038; --border-strong: #3a3f49;
     --accent: #6f97d6; --accent-strong: #93b0e8;
     --danger: #e06b66; --star: #f0a500; --badge-info: #4bb6cf;
+    --star-off: #7a808c; --badge-danger: #b03e39; --badge-info-fg: #16181c;
     --panel-warn-bg: #2a2410; --panel-warn-border: #6d5b1a;
     --banner-bg: #2a2410; --banner-border: #6d5b1a;
     --tag-bg: #262b38; --tag-border: #38405a; --tag-fg: #cdd6f4;
@@ -34,7 +42,8 @@
   --fg: #222; --muted: #667;
   --border: #e6e6e6; --border-strong: #bbb;
   --accent: #558; --accent-strong: #225;
-  --danger: #d9534f; --star: #f0a500; --badge-info: #5bc0de;
+  --danger: #c12e2a; --star: #a86f00; --badge-info: #5bc0de;
+  --star-off: #80858f; --badge-danger: var(--danger); --badge-info-fg: #16181c;
   --panel-warn-bg: #fff8e6; --panel-warn-border: #c90;
   --banner-bg: #fff3cd; --banner-border: #ffe08a;
   --tag-bg: #eef; --tag-border: #ccd; --tag-fg: #223;
@@ -49,6 +58,7 @@
   --border: #2c3038; --border-strong: #3a3f49;
   --accent: #6f97d6; --accent-strong: #93b0e8;
   --danger: #e06b66; --star: #f0a500; --badge-info: #4bb6cf;
+  --star-off: #7a808c; --badge-danger: #b03e39; --badge-info-fg: #16181c;
   --panel-warn-bg: #2a2410; --panel-warn-border: #6d5b1a;
   --banner-bg: #2a2410; --banner-border: #6d5b1a;
   --tag-bg: #262b38; --tag-border: #38405a; --tag-fg: #cdd6f4;
@@ -220,9 +230,9 @@ td img { width: 40px; border-radius: 3px; }
    against either stripe. */
 mark { background: var(--mark-bg); color: var(--mark-fg);
        border-radius: 2px; padding: 0 1px; }
-.badge { background: var(--danger); color: #fff; border-radius: 3px; font-size: .7rem;
+.badge { background: var(--badge-danger); color: #fff; border-radius: 3px; font-size: .7rem;
          padding: 0 .3rem; }
-.stars .star { cursor: pointer; color: var(--border-strong); }
+.stars .star { cursor: pointer; color: var(--star-off); }
 .stars .star.on { color: var(--star); }
 #review-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
                 padding: .6rem 1rem; margin-bottom: 1rem; }
@@ -232,17 +242,18 @@ mark { background: var(--mark-bg); color: var(--mark-fg);
 .review-body { flex: 1; }
 .cand { margin: .25rem 0; display: flex; gap: .5rem; align-items: center; }
 .cand-btn, .apply-fetched { cursor: pointer; }
-.armed { background: var(--danger); color: #fff; }
+.armed { background: var(--badge-danger); color: #fff; }
 .redo, .edit, .revert { cursor: pointer; border: none; background: none;
                         font-size: .9rem; color: var(--fg); }
-.badge.edited { background: var(--badge-info); }
+.badge.edited { background: var(--badge-info); color: var(--badge-info-fg); }
 /* muted: the queued badge sits beside "edited" and reads as secondary to it */
-.badge.queued { background: var(--muted); }
+/* --bg, not white: white on the dark theme's --muted is 2.63:1 (#147). */
+.badge.queued { background: var(--muted); color: var(--bg); }
 /* .badge defaults to --danger, which is wrong for a neutral fact about
    the library. It is also a <button>, so it must be told to look like
    the badges beside it rather than keeping the browser's grey default --
    the same trap the statistics panel's jump counts fell into. */
-.badge.edition { background: var(--badge-info); border: 0; cursor: pointer;
+.badge.edition { background: var(--badge-info); color: var(--badge-info-fg); border: 0; cursor: pointer;
                  font: inherit; font-size: .7rem; padding: 0 .3rem; }
 .edit-field { width: 95%; box-sizing: border-box; }
 .edit-num { width: 3.5em; margin-top: .2rem; }
@@ -823,7 +834,7 @@ body[data-mode="read-only"] #column-picker { display: none; }
 .sheet-stars { display: flex; align-items: center; gap: .05rem; }
 .sheet-star { min-width: 40px; min-height: 44px; font-size: 1.3rem;
               line-height: 1; padding: 0; border: 0; background: none;
-              color: var(--border-strong); }
+              color: var(--star-off); }
 .sheet-star.on { color: var(--star); }
 /* Named, not a sixth star: re-tapping the current rating clears it on the
    table too, but nothing there says so. */
