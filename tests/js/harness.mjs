@@ -208,6 +208,8 @@ const publish = `
   setStored: (k, v) => globalThis.localStorage.setItem(k, v),
   setSort: (k, asc) => { sortKey = k; sortAsc = asc; },
   setItems: (v) => { items = v; },
+  setEditing: (id, tags) => { editingId = id; editingTags = tags; },
+  dupeCard,
   setSearch: (v) => { document.querySelector("#search").value = v; },
   setExportFormat: (v) => { document.querySelector("#export-format").value = v; },
   setFlag: (v) => { document.querySelector("#f-flag").value = v; },

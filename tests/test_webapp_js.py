@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from humble_catalog import export, stats
-from tests.js_harness import eval_js, eval_js_error
+from tests.js_harness import VIEWER_JS as _STATIC_JS, eval_js, eval_js_error
 
 
 def _item(**overrides):
@@ -4846,3 +4846,83 @@ def test_a_bug_in_a_write_is_not_swallowed_as_a_failed_save():
       await app.saved("/api/items/1/rating", {rating: 1});
     })()""" % items)
     assert err == "RangeError: a bug"
+
+
+# ---- Every control says what it acts on (#144) ---------------------------
+# A control repeated once per row or card names its item, visible word
+# first, as the row's Edit and Redo buttons already did (A11Y-1 in
+# docs/ui-ux/standards.md). Tabbing through the table used to announce
+# "Unread, combo box" with no hint of which book it belonged to.
+
+def test_the_row_status_select_names_its_item():
+    html = eval_js("app.statusSelect(%s)" % json.dumps(
+        _item(id=3, name='Café "Noir"', read_status="reading")))
+    assert 'aria-label="Reading status: Café &quot;Noir&quot;"' in html
+
+
+def test_the_inline_editor_names_every_field():
+    items = json.dumps([_item(id=1, name="The Quiet Harbor: A Novel")])
+    tags = json.dumps({"genre": ["Fantasy"], "authors": ["Sam Coder"],
+                       "narrator": [], "user_tags": ["lent out"]})
+    html = eval_js("""(() => {
+      app.setItems(%s);
+      app.setEditing(1, %s);
+      app.render();
+      return dom.writes["#catalog tbody"];
+    })()""" % (items, tags))
+    for label in ("Source URL", "Series", "Number in series", "Notes",
+                  "Add genre", "Add author", "Add narrator", "Add my tag",
+                  "Remove genre: Fantasy", "Remove author: Sam Coder",
+                  "Remove my tag: lent out"):
+        assert f'aria-label="{label}"' in html, label
+
+
+def test_the_statistics_counts_say_what_they_show():
+    html = _render_stats(_stats_payload([
+        _section("type", "By type", [("E-books", 6)])]))
+    assert 'aria-label="Show E-books (6)"' in html
+
+
+def test_the_active_filter_chip_names_the_filter_it_clears():
+    html = eval_js("""(() => {
+      app.setItems([]);
+      app.setSearch("quiet");
+      app.renderActiveFilters();
+      return dom.writes["#filter-chips"];
+    })()""")
+    assert re.search(r'class="active-x"[^>]*aria-label="Clear filter: [^"]*quiet', html)
+
+
+def test_every_glyph_remove_button_has_a_name():
+    # The text "×" outranks a title, so title="Remove" never reached a
+    # screen reader. Text-level on purpose: some of these builders write
+    # straight into the live DOM, out of the harness's reach.
+    for path in _STATIC_JS:
+        src = path.read_text(encoding="utf-8")
+        for m in re.finditer(r"<button\b[^>]*>\s*&times;\s*</button>", src):
+            assert "aria-label=" in m.group(0), (path.name, m.group(0))
+
+
+def test_task_run_buttons_name_their_task():
+    html = eval_js("(app.renderTasks(), dom.writes['#task-cards'])")
+    assert 'aria-label="Run: Back up the catalog"' in html
+    runs = re.findall(r'<button class="task-go"[^>]*>', html)
+    assert runs and all('aria-label="Run: ' in b for b in runs)
+
+
+def test_browse_check_buttons_name_their_bundle():
+    html = _browse(_LIVE)["html"]
+    row = _browse_row(html, _LIVE[0]["url"])
+    assert f'aria-label="Check: {_LIVE[0]["name"]}"' in row
+
+
+def test_key_hide_buttons_name_their_product():
+    html = _with_keys('(app.renderKeys(), dom.writes["#keys-panel"])')
+    assert 'aria-label="Hide: Amber Hollow"' in html
+
+
+def test_keep_this_one_names_the_item_it_keeps():
+    a = _item(id=1, name="Building Widget Services 2e", bundles=["B"])
+    b = _item(id=2, name="Building Widget Services, 2nd Edition", bundles=["B"])
+    html = eval_js("app.dupeCard(%s, %s)" % (json.dumps(a), json.dumps(b)))
+    assert 'aria-label="Keep this one: Building Widget Services 2e"' in html

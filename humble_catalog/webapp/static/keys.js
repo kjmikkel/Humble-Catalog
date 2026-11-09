@@ -144,7 +144,8 @@ function renderKeys() {
       <td class="key-actions-cell">${
         r.hidden_at ? esc(r.hidden_at.slice(0, 10)) + " " : ""}${READ_ONLY ? "" : `<button
         class="key-hide" data-gamekey="${esc(r.gamekey)}"
-        data-machine="${esc(r.machine_name)}">${
+        data-machine="${esc(r.machine_name)}"
+        aria-label="${r.hidden_at ? "Unhide" : "Hide"}: ${esc(r.product || "")}">${
         r.hidden_at ? "unhide" : "hide"}</button>`}</td>
     </tr>`).join("")}</tbody></table>
     </div>`;
