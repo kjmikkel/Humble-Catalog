@@ -159,10 +159,21 @@ def test_the_library_table_gives_name_the_widest_column():
     assert len(widths) == 14, sorted(widths)
     assert max(widths, key=widths.get) == "name"
     assert widths["bundle"] < widths["name"]
-    # At 1440 px, with the filter sidebar open, the table's scroller is
-    # 1137 px wide (measured on the demo catalog), about 71rem. The issue
-    # was that it still scrolled sideways there.
-    assert sum(widths.values()) <= 70, sum(widths.values())
+    # No cap on the sum any more: it used to be held inside a 1440 px
+    # screen's scroller (about 71rem), and the text columns paid for it,
+    # down to a 70 px Publisher that broke "Example" mid-word. LAYOUT-1
+    # (owner decision 2026-11-09) takes sideways scroll over that (#154).
+
+
+def test_text_columns_are_at_least_nine_characters_wide():
+    # LAYOUT-1: about 9ch of text, inside a chip as well as in the cell.
+    # 9ch of a chip's .8rem font measured 62 px (demo catalog, Chromium);
+    # the chip adds 0.8rem of padding and border, the cell 1.1rem.
+    css = (Path(__file__).parent.parent / "humble_catalog" / "webapp"
+           / "static" / "style.css").read_text(encoding="utf-8")
+    widths = _library_column_widths(css)
+    for column in ("genre", "series", "authors", "narrator", "publisher", "bundle"):
+        assert widths[column] >= 5.8, (column, widths[column])
 
 
 def test_every_library_header_has_a_column_hook():
@@ -174,28 +185,31 @@ def test_every_library_header_has_a_column_hook():
         assert "data-sort=" in th or 'class="col-' in th, th
 
 
-def test_a_truncated_tag_in_the_table_stays_inside_its_cell():
-    # A fixed column no longer grows to fit a nowrap tag, so a long bundle
-    # or author name must be cut with an ellipsis rather than painted over
-    # the next column. The full name is in the tag's title.
+def test_a_long_tag_in_the_table_wraps_inside_its_cell():
+    # A fixed column does not grow to fit a tag, so a long bundle or author
+    # name must stay inside its cell rather than paint over the next column.
+    # It used to be cut with an ellipsis, the full name only in a mouse
+    # tooltip; LAYOUT-1 wraps it instead, so the whole value shows (#154).
     css = (Path(__file__).parent.parent / "humble_catalog" / "webapp"
            / "static" / "style.css").read_text(encoding="utf-8")
     rule = _css_rule(css, "#catalog td .tag")
-    for decl in ("max-width: 100%", "overflow: hidden",
-                 "text-overflow: ellipsis"):
+    for decl in ("max-width: 100%", "white-space: normal"):
         assert decl in rule, decl
+    for gone in ("text-overflow: ellipsis", "line-clamp"):
+        assert gone not in css.split("#catalog td .tag", 1)[1].split("}", 1)[0], gone
+    assert "#catalog td { overflow-wrap: break-word; }" in css
 
 
-def test_a_bundle_tag_wraps_to_two_lines_rather_than_one():
+def test_a_bundle_tag_shows_its_whole_name():
     # One line of an 88 px column showed a few letters of any bundle name
-    # (#76). Unclamped, a name ran to five lines and doubled the row; two
-    # lines fit the height every row already has for its cover and status.
+    # (#76), so it was clamped to two lines. That still cut a long name off,
+    # with the rest only in a mouse tooltip; LAYOUT-1 shows the whole value
+    # and accepts the taller row (#154). The bundle chip is a .tag, so the
+    # wrapping rule above covers it, and nothing may clamp it again.
     css = (Path(__file__).parent.parent / "humble_catalog" / "webapp"
            / "static" / "style.css").read_text(encoding="utf-8")
-    rule = _css_rule(css, "#catalog td .tag-link")
-    for decl in ("white-space: normal", "-webkit-line-clamp: 2",
-                 "line-clamp: 2", "display: -webkit-box"):
-        assert decl in rule, decl
+    assert "#catalog td .tag-link {" not in css
+    assert "line-clamp" not in css
 
 
 def test_the_tasks_section_is_its_own_scroller():
