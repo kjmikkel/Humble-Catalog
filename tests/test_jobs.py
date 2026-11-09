@@ -270,3 +270,34 @@ def test_another_job_leaves_update_step_rows_alone(monkeypatch, tmp_path):
     runner.start("reparse")
     runner.wait(timeout=30)
     assert _phase("harvest") == "Title"
+
+
+# ---- A job runs on the viewer's own catalog (#143) -----------------------
+# The CLI has no --db flag: every command opens catalog.db in its working
+# directory. The runner used to spawn in the viewer's working directory
+# whatever database the viewer had, so the demo viewer, started from the
+# repo root, ran its jobs on the real catalog.
+
+def test_a_job_runs_in_the_folder_holding_the_viewer_s_catalog(
+        monkeypatch, tmp_path):
+    elsewhere = tmp_path / "elsewhere"
+    home = tmp_path / "home"
+    elsewhere.mkdir()
+    home.mkdir()
+    db.connect(str(home / "catalog.db")).close()
+    monkeypatch.chdir(elsewhere)
+    runner = jobs.JobRunner(db_path=str(home / "catalog.db"))
+    monkeypatch.setattr(jobs, "argv", lambda command, options=None: [
+        sys.executable, "-c", "import os; print(os.getcwd())"])
+    runner.start("reparse")
+    assert runner.wait(timeout=30) == 0
+    assert str(home.resolve()) in runner.state()["log"]
+
+
+def test_a_viewer_whose_database_is_not_catalog_db_cannot_start_a_job(
+        tmp_path):
+    # The child would open catalog.db, a different file from the one on
+    # screen. Refusing is the only answer that cannot touch the wrong one.
+    runner = jobs.JobRunner(db_path=str(tmp_path / "demo.db"))
+    with pytest.raises(ValueError, match="catalog.db"):
+        runner.start("reparse")

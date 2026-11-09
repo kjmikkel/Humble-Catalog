@@ -20,6 +20,7 @@ import sys
 import threading
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 
 from humble_catalog import db
 
@@ -120,6 +121,15 @@ class JobRunner:
 
     def __init__(self, db_path="catalog.db"):
         self.db_path = db_path
+        # The CLI has no --db flag: every command opens catalog.db -- and
+        # covers/, cache/, backups/ -- in its working directory. So a job
+        # runs in the folder that holds the viewer's OWN database, and only
+        # when that file is named catalog.db; otherwise the child would
+        # open a different catalog from the one on screen. Spawning in the
+        # viewer's working directory instead is how the demo, started from
+        # the repo root, ran its jobs on the real library (#143).
+        path = Path(db_path).resolve()
+        self.cwd = str(path.parent) if path.name == "catalog.db" else None
         self._lock = threading.Lock()
         self._proc = None
         self._job = None
@@ -141,6 +151,11 @@ class JobRunner:
         is the spreadsheet upload, which passes a path IT created.
         """
         line = argv(command, options) + list(args)
+        if self.cwd is None:
+            raise ValueError(
+                "jobs run the catalog commands, which only open a file "
+                f"named catalog.db; this viewer's database is "
+                f"{Path(self.db_path).name}")
         if not force:
             live = self._live_row(command)
             if live is not None:
@@ -224,7 +239,7 @@ class JobRunner:
         return subprocess.Popen(
             line, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
-            cwd=os.getcwd(), creationflags=creationflags,
+            cwd=self.cwd, creationflags=creationflags,
             env={**os.environ, "PYTHONIOENCODING": "utf-8"})
 
     def _conn(self):

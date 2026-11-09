@@ -249,27 +249,41 @@ def seed(db_path):
     conn.close()
 
 
+def demo_db_path(base=None):
+    """Where the demo catalog lives: <base>/humble-catalog-demo/catalog.db.
+
+    Named catalog.db, in a folder of its own, because Tasks -> Run spawns
+    the CLI, which has no --db flag and opens catalog.db in its working
+    directory. The job runner works in the folder holding the viewer's
+    database, so this is what keeps a demo job on the demo (#143). base
+    defaults to the system temp directory: never beside the real
+    catalog.db, and never inside the repo, where a stray copy would sit
+    outside .gitignore's rules.
+    """
+    folder = Path(base or tempfile.gettempdir()) / "humble-catalog-demo"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / "catalog.db"
+
+
 def make_app(db_path):
     """The demo viewer, with every data directory pointed away from the
-    real ones beside catalog.db.
+    real ones beside the repo's catalog.db.
 
     covers_dir is the committed invented covers, never the real covers/.
-    backups_dir is a directory that does not exist, never ./backups: the
-    demo runs from the repo root, and the Tasks tab's restore picker
-    would otherwise list the real snapshots -- their dates and sizes in
-    frame in any screenshot.
+    backups_dir is backups/ beside the demo catalog -- where a backup job
+    run from the demo writes -- never ./backups: the demo runs from the
+    repo root, and the Tasks tab's restore picker would otherwise list the
+    real snapshots, their dates and sizes in frame in any screenshot.
     """
     return create_app(
         db_path=str(db_path), covers_dir=str(COVERS_DIR),
-        backups_dir=str(Path(tempfile.gettempdir())
-                        / "humble-catalog-demo-backups"))
+        backups_dir=str(Path(db_path).resolve().parent / "backups"))
 
 
 def main():
-    # A fixed name inside the system temp directory: stable enough to
-    # reopen between runs, and never beside catalog.db, where a stray
-    # demo.db would sit outside .gitignore's `catalog.db*` rule.
-    db_path = Path(tempfile.gettempdir()) / "humble-catalog-demo.db"
+    # A fixed folder inside the system temp directory: stable enough to
+    # reopen between runs. See demo_db_path for why the file is catalog.db.
+    db_path = demo_db_path()
     seed(db_path)
     print(f"Demo catalog: {db_path}")
     print(f"Serving {len(DEMO_ROWS)} invented items and "
