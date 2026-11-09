@@ -365,23 +365,25 @@ input.edit-url { width: 100%; box-sizing: border-box; margin: .2rem 0; }
    unsized columns. test_the_library_table_gives_name_the_widest_column
    holds Name widest and the sum inside a 1440 px screen's scroller. */
 #catalog { table-layout: fixed; }
+/* break-word, not anywhere: a word is broken only when it alone is wider
+   than the column, which the 9ch floors below make rare (LAYOUT-1). */
 #catalog td { overflow-wrap: break-word; }
-/* A fixed column no longer grows to fit a nowrap tag, so a long one is cut
-   here; tagBadges and the bundle links put the full name in a title. */
-#catalog td .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+/* Chips wrap inside their cell rather than being cut with an ellipsis
+   (LAYOUT-1, #154). The full value used to be only in a title tooltip,
+   which a keyboard or touch user never sees. That includes bundles, whose
+   two-line clamp (#76) cut the same way; a long one now costs the row a
+   line or two of height, the price the owner chose over hidden text. */
+#catalog td .tag { max-width: 100%; white-space: normal;
                    box-sizing: border-box; vertical-align: top; }
-/* Except a bundle, which gets two lines (#76): one line of an 88 px column
-   is a few letters, and bundleLabel has already dropped the prefix every
-   bundle shares, so two lines reach the part that names it. Unclamped a
-   name ran to five lines and doubled the row; two fit the height a row
-   already has for its cover and status select. */
-#catalog td .tag-link { white-space: normal; overflow-wrap: anywhere;
-                        display: -webkit-box; -webkit-box-orient: vertical;
-                        -webkit-line-clamp: 2; line-clamp: 2; }
 #catalog td select, #catalog td .tag-input { max-width: 100%; }
 /* Floors, in rem, where content cannot shrink: the 40 px cover 3.6, the
-   Status select 7.7, the five stars 4.8. Tag columns can go below their
-   longest tag now that tags truncate. The sum must stay <= 70. */
+   Status select 7.7, the five stars 4.8. The six text columns get 5.8
+   (LAYOUT-1, #154): 9ch of a chip's .8rem font is 3.9rem, plus the chip's
+   own padding and border (0.8rem) and the cell's padding (1.1rem). Cell
+   text, at full size, gets its 9ch inside that too (4.4 + 1.1). A single
+   word longer than that still breaks, as the last resort it is meant to be. The table is wider than a 1440 px screen's scroller
+   because of it, and scrolls sideways there; the owner accepted that
+   (2026-11-09) over cut-off and mid-word-broken text. */
 /* border-box, so each width below is the column as drawn, padding and all,
    and their sum is the table's real width rather than 15rem short of it. */
 #catalog th { box-sizing: border-box; }
@@ -389,12 +391,12 @@ input.edit-url { width: 100%; box-sizing: border-box; margin: .2rem 0; }
 #catalog th[data-sort="name"] { width: 9.2rem; }
 #catalog th[data-sort="type"] { width: 5.4rem; }
 #catalog th[data-sort="read_status"] { width: 7.7rem; }
-#catalog th[data-sort="genre"] { width: 5rem; }
-#catalog th[data-sort="series"] { width: 4rem; }
-#catalog th[data-sort="authors"] { width: 5rem; }
-#catalog th[data-sort="narrator"] { width: 4.6rem; }
-#catalog th[data-sort="publisher"] { width: 4.4rem; }
-#catalog th[data-sort="bundle"] { width: 5.4rem; }
+#catalog th[data-sort="genre"] { width: 5.8rem; }
+#catalog th[data-sort="series"] { width: 5.8rem; }
+#catalog th[data-sort="authors"] { width: 5.8rem; }
+#catalog th[data-sort="narrator"] { width: 5.8rem; }
+#catalog th[data-sort="publisher"] { width: 5.8rem; }
+#catalog th[data-sort="bundle"] { width: 5.8rem; }
 #catalog th[data-sort="external_rating"] { width: 3.9rem; }
 #catalog th[data-sort="my_rating"] { width: 4.8rem; }
 #catalog th.col-tags { width: 3.4rem; }
