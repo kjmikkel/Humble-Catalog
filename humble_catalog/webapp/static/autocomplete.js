@@ -6,12 +6,26 @@
 //   countsFn (optional): Map(tag -> item count); shown next to each
 //     suggestion when provided.
 // The input must sit inside a position:relative wrapper (.ac-wrap).
+//
+// Exposed as the WAI-ARIA combobox pattern (#150): the input is a
+// combobox, the list a listbox of options, and the highlighted option is
+// named by aria-activedescendant while focus stays in the field. Without
+// it a screen reader heard neither the list nor the arrow keys' choice.
 const Autocomplete = (() => {
   // At most one list is open at a time, so it lives here rather than per
   // input - but every handler must then check the open list is its own.
   let openList = null, openOwner = null, openClip = null;
+  // Fields with no id still need a unique id for their list.
+  let unnamed = 0;
 
   function close() {
+    if (openOwner) {
+      // Collapsed state on the field that owned the list. aria-controls
+      // goes with the list, so it never points at an element that is gone.
+      openOwner.setAttribute("aria-expanded", "false");
+      openOwner.removeAttribute("aria-activedescendant");
+      openOwner.removeAttribute("aria-controls");
+    }
     if (openList) { openList.remove(); openList = null; openOwner = null; }
     openClip = null;
   }
@@ -65,6 +79,10 @@ const Autocomplete = (() => {
   function attach(input, optionsFn, onPick, countsFn) {
     let sel = -1;
     const owned = () => openList && openOwner === input;
+    const listId = `${input.id || "ac-field-" + (++unnamed)}-suggestions`;
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
 
     const commit = (value, viaSuggestion) => {
       if (owned()) close();
@@ -82,14 +100,20 @@ const Autocomplete = (() => {
       openList = document.createElement("div");
       openOwner = input;
       openList.className = "ac-list";
+      openList.id = listId;
+      openList.setAttribute("role", "listbox");
+      openList.setAttribute("aria-label", "Suggestions");
       // The list scrolls and holds no focusable children, which makes
       // Chrome treat it as a "focusable scroller" and give it a tab stop
       // of its own - swallowing the Tab that should reach the next
       // field. An explicit -1 keeps it out of sequential navigation.
       openList.tabIndex = -1;
-      for (const m of matches) {
+      matches.forEach((m, n) => {
         const d = document.createElement("div");
         d.className = "ac-item";
+        d.id = `${listId}-${n}`;
+        d.setAttribute("role", "option");
+        d.setAttribute("aria-selected", "false");
         d.textContent = m;
         // the count span makes textContent unusable as the commit
         // value, so every row carries it in dataset.value instead
@@ -99,6 +123,8 @@ const Autocomplete = (() => {
           c.className = "ac-count";
           c.textContent = counts.get(m);
           d.appendChild(c);
+          // Said as "Fantasy, 3", not run together as "Fantasy3".
+          d.setAttribute("aria-label", `${m}, ${counts.get(m)}`);
         }
         // mousedown, not click: fires before blur tears the list down
         d.addEventListener("mousedown", (ev) => {
@@ -106,12 +132,14 @@ const Autocomplete = (() => {
           commit(m, true);
         });
         openList.appendChild(d);
-      }
+      });
       // Anchor the popup to the input, not to wherever it lands in the
       // flow: .ac-wrap also holds chips, which wrap onto extra lines and
       // would otherwise drag the list sideways and up. It must be in the
       // document before reposition() can measure it.
       document.body.appendChild(openList);
+      input.setAttribute("aria-controls", listId);
+      input.setAttribute("aria-expanded", "true");
       openClip = scrollParent(input);
       reposition();
     };
@@ -138,7 +166,12 @@ const Autocomplete = (() => {
         const opts = [...openList.children];
         if (!opts.length) return;
         sel = (sel + (ev.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
-        opts.forEach((el, i) => el.classList.toggle("sel", i === sel));
+        opts.forEach((el, i) => {
+          el.classList.toggle("sel", i === sel);
+          el.setAttribute("aria-selected", String(i === sel));
+        });
+        input.setAttribute("aria-activedescendant", opts[sel].id);
+        opts[sel].scrollIntoView?.({block: "nearest"});
         return;
       }
       // never read values out of a list belonging to another input
