@@ -84,3 +84,23 @@ def test_axe_core_is_pinned_exactly_and_never_from_a_cdn(a11y):
     assert a11y.AXE.parts[-3:] == ("node_modules", "axe-core", "axe.min.js")
     src = (ROOT / "scripts" / "a11y_viewer.py").read_text(encoding="utf-8")
     assert "cdn" not in src.lower().replace("never a cdn", "")
+
+
+def test_the_gallery_scan_points_at_what_the_demo_serves(a11y, tmp_path):
+    """The gallery pass (#153) passes for the wrong reason if its URL stops
+    resolving or its ready selector stops matching what the gallery draws:
+    one fails as 'drew nothing', the other would scan the wrong page."""
+    import sys
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import demo_catalog
+
+    name, width, path, ready = a11y.GALLERY
+    assert width in a11y.WIDTHS
+    dbp = tmp_path / "catalog.db"
+    demo_catalog.seed(dbp)
+    client = demo_catalog.make_app(dbp).test_client()
+    for theme in a11y.THEMES:
+        assert client.get(path.format(theme=theme)).status_code == 200, theme
+    gallery = (ROOT / "scripts" / "demo_gallery.js").read_text(encoding="utf-8")
+    for cls in ("gallery", "gallery-state"):
+        assert f'class="{cls}"' in gallery, cls

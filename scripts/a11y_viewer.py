@@ -4,7 +4,9 @@ Runs axe-core in headless Chromium over every section of the viewer, at
 desktop and phone width, in the light and dark themes, and in the states
 a section only shows when opened: the overview, the column picker, the
 inline editor, the phone sheet on a rated and an unrated card, and
-Maintenance's panels. Each violation is compared with
+Maintenance's panels. It also scans the demo's component gallery
+(/dev/gallery, #153) in each theme at desktop width: every component in
+the states the sections rarely show at once. Each violation is compared with
 tests/a11y-baseline.txt, and the run fails on:
 - a violation that is not in the baseline;
 - a baseline line that no longer occurs, so the file only shrinks;
@@ -43,6 +45,13 @@ THEMES = ("light", "dark")
 TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 
 CARD = "#card-list .card"
+
+# The component gallery, scanned at this width only: its frames need the
+# table, which the viewer draws only above the phone breakpoint. Its
+# theme is pinned by the URL, not the toggle. Ready once the captures
+# have replaced <main>: until then it is the plain library.
+GALLERY = ("gallery", 1280, "/dev/gallery/frame?theme={theme}",
+           ".gallery .gallery-state")
 
 
 def _smoke():
@@ -144,6 +153,19 @@ def _set_theme(page, theme):
     raise RuntimeError(f"the theme toggle never reached {theme}")
 
 
+def _scan(page, axe_path, name, width, theme, found):
+    page.add_script_tag(path=str(axe_path))
+    result = page.evaluate(
+        "(tags) => axe.run(document, {runOnly: {type: 'tag', values: tags}})",
+        TAGS)
+    for v in result["violations"]:
+        for node in v["nodes"]:
+            target = " ".join(str(t) for t in node["target"])
+            found.add(key(name, width, theme, v["id"], target))
+    print(f"{name} @ {width} {theme}: "
+          f"{len(result['violations'])} rules violated")
+
+
 def _drive(base, axe_path, problems):
     from playwright.sync_api import sync_playwright
     smoke = _smoke()
@@ -177,16 +199,17 @@ def _drive(base, axe_path, problems):
                             problems.append(f"{name} at {width} px ({theme}) "
                                             f"drew nothing to check: {ready}")
                             continue
-                        page.add_script_tag(path=str(axe_path))
-                        result = page.evaluate(
-                            "(tags) => axe.run(document, {runOnly: {type: 'tag', values: tags}})",
-                            TAGS)
-                        for v in result["violations"]:
-                            for node in v["nodes"]:
-                                target = " ".join(str(t) for t in node["target"])
-                                found.add(key(name, width, theme, v["id"], target))
-                        print(f"{name} @ {width} {theme}: "
-                              f"{len(result['violations'])} rules violated")
+                        _scan(page, axe_path, name, width, theme, found)
+                    g_name, g_width, g_path, g_ready = GALLERY
+                    if width == g_width:
+                        page.goto(base + g_path.format(theme=theme))
+                        try:
+                            page.wait_for_selector(g_ready, timeout=20_000)
+                        except Exception:   # noqa: BLE001 - reported
+                            problems.append(f"{g_name} at {width} px ({theme}) "
+                                            f"drew nothing to check: {g_ready}")
+                        else:
+                            _scan(page, axe_path, g_name, width, theme, found)
                     context.close()
         finally:
             browser.close()
