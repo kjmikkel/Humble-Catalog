@@ -432,6 +432,22 @@ const EXPORT_COLUMNS = [
   "read_status",
 ];
 
+// What the picker calls each column (CONTENT-3, #155): the table header's
+// own word where the table shows the field, so "Mine" here is "Mine"
+// there, and a plain name for the fields only the export carries. The raw
+// name follows in the picker, because it is the CSV/XLSX header the file
+// will actually have; the files themselves are unchanged. A test fails if
+// a column in EXPORT_COLUMNS arrives without a label.
+const EXPORT_LABELS = {
+  title: "Name", type: "Type", publisher: "Publisher", authors: "Authors",
+  genre: "Genre", series: "Series", series_number: "Number in series",
+  narrator: "Narrator", illustrator: "Artist", my_rating: "Mine",
+  external_rating: "Rating", rating_source: "Rating source",
+  formats: "Formats", bundles: "Bundle", first_purchased: "First purchased",
+  status: "Enrichment", edited: "Edited", user_tags: "My tags",
+  user_comment: "Notes", read_status: "Status",
+};
+
 // The selection lives here, not in the checkboxes: the boxes are a
 // rendering of this set. Reading state back out of the DOM would also be
 // untestable, since the JS harness has no real elements.
@@ -484,7 +500,8 @@ function renderColumnCount() {
 function renderColumnPicker() {
   $("#column-picker-body").innerHTML = EXPORT_COLUMNS.map(c =>
     `<label><input type="checkbox" class="col-check" data-col="${c}"` +
-    `${exportColumns.has(c) ? " checked" : ""}> ${esc(c)}</label>`).join("");
+    `${exportColumns.has(c) ? " checked" : ""}> ${esc(EXPORT_LABELS[c] || c)} ` +
+    `<span class="col-raw">(${esc(c)})</span></label>`).join("");
   renderColumnCount();
 }
 

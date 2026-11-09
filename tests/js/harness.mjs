@@ -203,6 +203,7 @@ const publish = `
   getReadOnly: () => READ_ONLY,
   setStatusFilter: (arr) => { statusFilter.clear(); for (const s of arr) statusFilter.add(s); },
   EXPORT_COLUMNS, toggleColumn, loadColumnSelection, renderColumnPicker,
+  EXPORT_LABELS,
   getExportColumns: () => [...exportColumns],
   setExportColumns: (v) => { exportColumns = new Set(v); },
   setStored: (k, v) => globalThis.localStorage.setItem(k, v),
