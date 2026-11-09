@@ -217,7 +217,9 @@ function stars(item) {
           + `role="radio" aria-checked="${item.my_rating === n}" `
           + `aria-label="${label}" title="${label}" `
           + `tabindex="${n === tabbable ? 0 : -1}" `
-          + `data-id="${item.id}" data-n="${n}">★</span>`;
+          // Outline when unlit: in the light theme the two colours sit
+          // close in lightness, so the shape carries the state (#147).
+          + `data-id="${item.id}" data-n="${n}">${item.my_rating >= n ? "★" : "☆"}</span>`;
   }
   return `<span class="rating-group" role="radiogroup" aria-label="Rating" `
        + `data-id="${item.id}">${html}</span>`;
@@ -268,19 +270,17 @@ async function applyRating(id, star, rating) {
   // several stars at once; waiting for the response leaves the focused
   // star reporting a stale rating for the length of a round trip, and
   // the repeat recomputes from it -- two quick presses moved one star.
-  // Nothing is lost by going first: post() never inspects the response,
-  // so a rejected write already updated the row under the old order.
+  // Nothing is lost by going first: a failed write puts the old rating
+  // back below.
   if (item) item.my_rating = rating;
   render();
   const focus = () => document.querySelector(
     `.rating-group[data-id="${id}"] .star[data-n="${star}"]`)
     ?.focus({preventScroll: true});
   focus();
-  try {
-    await post(`/api/items/${id}/rating`, {rating});
-  } catch (err) {
-    // Offline. Optimism is only honest if it is undone: the row must
-    // not keep showing a rating the server never took.
+  if (!(await saved(`/api/items/${id}/rating`, {rating}))) {
+    // Unreachable or refused. Optimism is only honest if it is undone:
+    // the row must not keep showing a rating the server never took.
     if (item) item.my_rating = previous;
     render();
     focus();
@@ -910,7 +910,7 @@ function sheetFor(i) {
         // not "pressed" on every star below it (#145).
         `<button type="button" class="sheet-star${rating >= n ? " on" : ""}"
            data-id="${i.id}" data-n="${n}" aria-pressed="${rating === n}"
-           aria-label="${n} star${n === 1 ? "" : "s"}">&#9733;</button>`).join("")}${
+           aria-label="${n} star${n === 1 ? "" : "s"}">${rating >= n ? "&#9733;" : "&#9734;"}</button>`).join("")}${
       rating ? `<button type="button" class="sheet-star-clear" data-id="${i.id}"
                   data-n="0">Clear</button>` : ""}</div>
     <button type="button" class="sheet-done">Done</button>`;
@@ -962,7 +962,10 @@ function closeSheet() {
 // document stub swallows listeners, so a delegated click is unreachable
 // there. They post to the same routes the table's own controls use.
 async function setSheetStatus(id, status) {
-  await post(`/api/items/${id}/read-status`, {status});
+  // A failed write leaves the item alone; refreshSheet still runs so the
+  // pressed button goes back to the status the server has.
+  if (!(await saved(`/api/items/${id}/read-status`, {status})))
+    return refreshSheet(id);
   const item = items.find((i) => i.id === id);
   if (item) item.read_status = status;
   refreshSheet(id);
@@ -972,7 +975,8 @@ async function setSheetRating(id, n) {
   // 0 means clear, which the route spells as null -- the same value the
   // table's own star sends when the current rating is tapped again.
   const rating = n === 0 ? null : n;
-  await post(`/api/items/${id}/rating`, {rating});
+  if (!(await saved(`/api/items/${id}/rating`, {rating})))
+    return refreshSheet(id);
   const item = items.find((i) => i.id === id);
   if (item) item.my_rating = rating;
   refreshSheet(id);
@@ -1558,28 +1562,28 @@ document.addEventListener("click", async (ev) => {
         return;
       }
     }
-    await post(`/api/items/${id}/user-tags`, {tags: user_tags});
-    await post(`/api/items/${id}/comment`, {comment});
+    // A failed save keeps the editor open with what was typed, so nothing
+    // is lost and Save can simply be pressed again.
+    if (!(await saved(`/api/items/${id}/user-tags`, {tags: user_tags})))
+      return;
+    if (!(await saved(`/api/items/${id}/comment`, {comment}))) return;
     editingId = null;
     editingTags = null;
     await load();
   } else if (el.classList.contains("revert")) {
     armOrFire(el, async () => {
-      await post(`/api/items/${el.dataset.id}/revert`);
-      await load();
+      if (await saved(`/api/items/${el.dataset.id}/revert`)) await load();
     });
   } else if (el.classList.contains("redo")) {
     armOrFire(el, async () => {
-      await post(`/api/items/${el.dataset.id}/reopen`);
-      await load();
+      if (await saved(`/api/items/${el.dataset.id}/reopen`)) await load();
     });
   } else if (el.classList.contains("override")) {
     // No armOrFire here: queuing changes nothing until an enrich run, and
     // the badge plus the "Queued for re-enrich" filter make it reversible.
     const row = items.find(i => i.id === Number(el.dataset.id));
-    await post(`/api/items/${el.dataset.id}/override`,
-               {override: !(row && row.override)});
-    await load();
+    if (await saved(`/api/items/${el.dataset.id}/override`,
+                    {override: !(row && row.override)})) await load();
   } else if (el.classList.contains("genre-rename")) {
     const input = el.closest("tr").querySelector(".genre-rename-input");
     const newName = input.value.trim();
@@ -1616,12 +1620,20 @@ document.addEventListener("click", async (ev) => {
 document.addEventListener("change", async (e) => {
   const el = e.target;
   if (!el.classList || !el.classList.contains("read-status-select")) return;
-  const id = +el.dataset.id, status = el.value;
-  await post(`/api/items/${id}/read-status`, {status});
-  const item = items.find(i => i.id === id);
-  if (item) item.read_status = status;
-  render();   // which redraws the panel too, in step with the table
+  await applyStatus(+el.dataset.id, el.value);
 });
+
+// Store a row's reading status. Apart from the listener so a test can
+// drive it (the harness's document stub swallows listeners). On a failed
+// write the item keeps its old status, and render() puts the select back
+// to it -- the select itself already shows the new value, which is the
+// lie #142 was about.
+async function applyStatus(id, status) {
+  const ok = await saved(`/api/items/${id}/read-status`, {status});
+  const item = items.find(i => i.id === id);
+  if (ok && item) item.read_status = status;
+  render();   // which redraws the panel too, in step with the table
+}
 // The card is a button, so it answers Enter and Space like one; Escape
 // closes the sheet, which a dialog has to.
 document.addEventListener("keydown", (ev) => {

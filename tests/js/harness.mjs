@@ -166,7 +166,7 @@ const publish = `
 ;globalThis.__app = {
   tagBadges, bundleLabel, person, personField, esc, highlight, chipFilters, passesChipFilters,
   visible, render, scheduleRender, ROW_CAP, showAllRows, viewKey,
-  restoreFilters, startFresh, keepRestored, getStatusFilter: () => statusFilter, stars, ratingForKey, applyRating, ariaSortFor, tagCounts, shouldPostEnrichmentEdit, load, loadReview, shownRows,
+  restoreFilters, startFresh, keepRestored, getStatusFilter: () => statusFilter, stars, ratingForKey, applyRating, applyStatus, saved, ariaSortFor, tagCounts, shouldPostEnrichmentEdit, load, loadReview, shownRows,
   renderBulkBar, runBulk, undoBulk,
   getLastTagOp: () => lastTagOp,
   setLastTagOp: (v) => { lastTagOp = v; },

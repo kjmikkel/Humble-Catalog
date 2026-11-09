@@ -155,3 +155,45 @@ async function post(url, body) {
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(body || {})});
 }
+
+// ---- Writes the server has to confirm (#142) ---------------------------
+// post() resolves on ANY status and rejects only when the server cannot be
+// reached, so a caller that merely awaited it showed a refused write and a
+// lost one exactly like a saved one: a status changed while the viewer was
+// stopped stayed on screen and was gone on reload. saved() is how a write
+// asks "did that stick?", and it reports the answer in #write-error.
+
+class WriteFailed extends Error {}
+
+async function saved(url, body) {
+  let resp;
+  try {
+    resp = await post(url, body);
+  } catch (err) {
+    // fetch rejects with a TypeError for an unreachable server. Anything
+    // else thrown here is a bug in the caller and must not be dressed up
+    // as a failed save.
+    if (!(err instanceof TypeError)) throw err;
+    reportWriteError(new WriteFailed("the viewer isn't reachable"));
+    return false;
+  }
+  if (!resp.ok) {
+    let reason = "";
+    try { reason = (await resp.json()).error || ""; } catch { /* not JSON */ }
+    reportWriteError(new WriteFailed(
+      reason || `the server refused it (HTTP ${resp.status})`));
+    return false;
+  }
+  reportWriteError(null);
+  return true;
+}
+
+// #write-error is in the markup from first paint and only ever has its
+// text changed: a live region inserted together with its text is not
+// reliably announced (the same reason as #table-status). One line for
+// the whole page, because a write can fail from any section.
+function reportWriteError(err) {
+  const el = $("#write-error");
+  if (!el) return;
+  el.textContent = err ? `Couldn't save: ${err.message}.` : "";
+}
