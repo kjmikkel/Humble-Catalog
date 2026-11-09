@@ -475,6 +475,9 @@ a { color: var(--accent); }
 #column-picker-panel label { display: block; white-space: nowrap;
                              font-size: .9em; }
 #column-picker-panel button { grid-column: span 2; margin-top: .4rem; }
+/* The raw field name after the table's label: secondary, but it is the
+   header the exported file will carry (CONTENT-3, #155). */
+.col-raw { color: var(--muted); }
 
 /* Reading-status pill. The four fills come from the theme's --status-*
    custom properties (defined per theme block alongside the rest of the
