@@ -1466,6 +1466,70 @@ def _with_keys(expression):
     })()""" % (_KEY_PAYLOAD, expression))
 
 
+# ---- #145: toggle state is exposed, not just drawn ----------------------
+
+def test_status_chips_report_pressed_from_the_filter():
+    pressed = eval_js("""(() => {
+      dom.reset();
+      const chips = dom.plantAll(".status-chip",
+        [{status: "read"}, {status: "dnf"}, {status: "unread"}]);
+      app.setStatusFilter(["read", "dnf"]);
+      app.syncStatusChips();
+      return chips.map(c => [c.getAttribute("aria-pressed"), c.classList.contains("on")]);
+    })()""")
+    assert pressed == [["true", True], ["true", True], ["false", False]]
+
+
+def test_clearing_all_filters_unpresses_every_status_chip():
+    pressed = eval_js("""(() => {
+      dom.reset();
+      const chips = dom.plantAll(".status-chip", [{status: "read"}, {status: "dnf"}]);
+      app.setStatusFilter(["read"]);
+      app.syncStatusChips();
+      app.clearAllFilters();
+      return chips.map(c => c.getAttribute("aria-pressed"));
+    })()""")
+    assert pressed == ["false", "false"]
+
+
+def test_a_jump_from_the_overview_presses_only_its_status():
+    pressed = eval_js("""(() => {
+      dom.reset();
+      const chips = dom.plantAll(".status-chip", [{status: "read"}, {status: "reading"}]);
+      app.setStatusFilter(["read"]);
+      app.setOnlyStatus("reading");
+      return chips.map(c => c.getAttribute("aria-pressed"));
+    })()""")
+    assert pressed == ["false", "true"]
+
+
+def test_the_status_chips_start_unpressed_inside_a_named_group():
+    html = (Path(__file__).resolve().parent.parent / "humble_catalog" / "webapp"
+            / "static" / "index.html").read_text(encoding="utf-8")
+    assert '<span id="status-filter" role="group"' in html
+    chips = re.findall(r'<button[^>]*class="status-chip"[^>]*>', html)
+    assert len(chips) == 5
+    assert all('aria-pressed="false"' in c for c in chips)
+
+
+def test_key_chips_report_which_states_are_shown():
+    html = _with_keys('''(app.setKeyStates(["unredeemed"]), app.renderKeys(),
+                          dom.writes["#keys-panel"])''')
+    assert 'id="key-chips" role="group"' in html
+    chips = re.findall(r'<button[^>]*class="key-chip[^"]*"[^>]*>', html)
+    assert chips
+    for chip in chips:
+        on = 'data-state="unredeemed"' in chip
+        assert f'aria-pressed="{str(on).lower()}"' in chip
+
+
+def test_the_sheet_presses_only_the_star_that_holds_the_rating():
+    html = eval_js("app.sheetFor(%s)" % json.dumps(_item(my_rating=3)))
+    stars = re.findall(r'<button[^>]*class="sheet-star[ "][^>]*>', html)
+    assert len(stars) == 5
+    assert [('aria-pressed="true"' in s) for s in stars] == [False, False, True, False, False]
+
+
 def test_the_keys_panel_lists_the_reported_rows():
     html = _with_keys('(app.renderKeys(), dom.writes["#keys-panel"])')
     assert "Amber Hollow" in html
@@ -4846,67 +4910,3 @@ def test_a_bug_in_a_write_is_not_swallowed_as_a_failed_save():
       await app.saved("/api/items/1/rating", {rating: 1});
     })()""" % items)
     assert err == "RangeError: a bug"
-
-
-# ---- #145: toggle state is exposed, not just drawn ----------------------
-
-def test_status_chips_report_pressed_from_the_filter():
-    pressed = eval_js("""(() => {
-      dom.reset();
-      const chips = dom.plantAll(".status-chip",
-        [{status: "read"}, {status: "dnf"}, {status: "unread"}]);
-      app.setStatusFilter(["read", "dnf"]);
-      app.syncStatusChips();
-      return chips.map(c => [c.getAttribute("aria-pressed"), c.classList.contains("on")]);
-    })()""")
-    assert pressed == [["true", True], ["true", True], ["false", False]]
-
-
-def test_clearing_all_filters_unpresses_every_status_chip():
-    pressed = eval_js("""(() => {
-      dom.reset();
-      const chips = dom.plantAll(".status-chip", [{status: "read"}, {status: "dnf"}]);
-      app.setStatusFilter(["read"]);
-      app.syncStatusChips();
-      app.clearAllFilters();
-      return chips.map(c => c.getAttribute("aria-pressed"));
-    })()""")
-    assert pressed == ["false", "false"]
-
-
-def test_a_jump_from_the_overview_presses_only_its_status():
-    pressed = eval_js("""(() => {
-      dom.reset();
-      const chips = dom.plantAll(".status-chip", [{status: "read"}, {status: "reading"}]);
-      app.setStatusFilter(["read"]);
-      app.setOnlyStatus("reading");
-      return chips.map(c => c.getAttribute("aria-pressed"));
-    })()""")
-    assert pressed == ["false", "true"]
-
-
-def test_the_status_chips_start_unpressed_inside_a_named_group():
-    html = (Path(__file__).resolve().parent.parent / "humble_catalog" / "webapp"
-            / "static" / "index.html").read_text(encoding="utf-8")
-    assert '<span id="status-filter" role="group"' in html
-    chips = re.findall(r'<button[^>]*class="status-chip"[^>]*>', html)
-    assert len(chips) == 5
-    assert all('aria-pressed="false"' in c for c in chips)
-
-
-def test_key_chips_report_which_states_are_shown():
-    html = _with_keys('''(app.setKeyStates(["unredeemed"]), app.renderKeys(),
-                          dom.writes["#keys-panel"])''')
-    assert 'id="key-chips" role="group"' in html
-    chips = re.findall(r'<button[^>]*class="key-chip[^"]*"[^>]*>', html)
-    assert chips
-    for chip in chips:
-        on = 'data-state="unredeemed"' in chip
-        assert f'aria-pressed="{str(on).lower()}"' in chip
-
-
-def test_the_sheet_presses_only_the_star_that_holds_the_rating():
-    html = eval_js("app.sheetFor(%s)" % json.dumps(_item(my_rating=3)))
-    stars = re.findall(r'<button[^>]*class="sheet-star[ "][^>]*>', html)
-    assert len(stars) == 5
-    assert [('aria-pressed="true"' in s) for s in stars] == [False, False, True, False, False]
