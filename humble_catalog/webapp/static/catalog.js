@@ -217,7 +217,9 @@ function stars(item) {
           + `role="radio" aria-checked="${item.my_rating === n}" `
           + `aria-label="${label}" title="${label}" `
           + `tabindex="${n === tabbable ? 0 : -1}" `
-          + `data-id="${item.id}" data-n="${n}">★</span>`;
+          // Outline when unlit: in the light theme the two colours sit
+          // close in lightness, so the shape carries the state (#147).
+          + `data-id="${item.id}" data-n="${n}">${item.my_rating >= n ? "★" : "☆"}</span>`;
   }
   return `<span class="rating-group" role="radiogroup" aria-label="Rating" `
        + `data-id="${item.id}">${html}</span>`;
@@ -892,7 +894,7 @@ function sheetFor(i) {
       [1, 2, 3, 4, 5].map((n) =>
         `<button type="button" class="sheet-star${rating >= n ? " on" : ""}"
            data-id="${i.id}" data-n="${n}"
-           aria-label="${n} star${n === 1 ? "" : "s"}">&#9733;</button>`).join("")}${
+           aria-label="${n} star${n === 1 ? "" : "s"}">${rating >= n ? "&#9733;" : "&#9734;"}</button>`).join("")}${
       rating ? `<button type="button" class="sheet-star-clear" data-id="${i.id}"
                   data-n="0">Clear</button>` : ""}</div>
     <button type="button" class="sheet-done">Done</button>`;
