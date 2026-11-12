@@ -476,6 +476,24 @@ def _page(bundle=None):
         _row("e", tree))
 
 
+@pytest.mark.parametrize("text_row", [
+    "6e:T-10,abc",          # int() would accept the sign: pos goes back
+    "6e:T 10,abc",          # ...and surrounding whitespace
+    "6e:T10abc",            # no comma at all
+    "6e:T,abc",             # no digits
+    "6e:Tzz,abc",           # not hex
+])
+def test_a_malformed_text_row_ends_the_parse_instead_of_looping(text_row):
+    rows = list(bundle_preview._rows(_row(0, {"a": 1}) + text_row))
+    assert rows == [{"a": 1}]
+
+
+def test_a_row_nested_too_deep_to_parse_is_skipped():
+    deep = "[" * 100_000 + "]" * 100_000
+    rows = list(bundle_preview._rows(f"0:{deep}\n" + _row(1, {"a": 1})))
+    assert rows == [{"a": 1}]
+
+
 def test_fetch_bundle_parses_the_flight_payload():
     bundle = bundle_preview.fetch_bundle(
         "https://www.humblebundle.com/books/the-world-of-examplia-books",

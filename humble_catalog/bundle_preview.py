@@ -59,6 +59,7 @@ _PUSH = re.compile(r'self\.__next_f\.push\((\[\s*1\s*,\s*".*?"\s*\])\)</script>'
                    re.S)
 # One flight row: a hex id, a colon, and an optional uppercase tag.
 _ROW = re.compile(rb"([0-9a-f]+):([A-Z]*)")
+_HEX = re.compile(rb"[0-9a-fA-F]+")
 # Said by every refusal below that may mean the redesign moved again.
 _SHAPE_CHANGED = "Humble may have changed the page"
 
@@ -98,18 +99,23 @@ def _rows(flight):
             continue
         pos = match.end()
         if match.group(2) == b"T":
+            # Plain hex digits only, never int()'s full grammar: int()
+            # also takes a sign, so "T-10," from a hostile page would move
+            # pos backwards and loop forever. With digits required, pos
+            # strictly increases -- the invariant that ends this loop.
             comma = data.find(b",", pos)
-            try:
-                length = int(data[pos:comma], 16)
-            except ValueError:
+            digits = data[pos:comma] if comma > pos else b""
+            if not _HEX.fullmatch(digits):
                 return
-            pos = comma + 1 + length
+            pos = comma + 1 + int(digits, 16)
             continue
         newline = data.find(b"\n", pos)
         end = len(data) if newline < 0 else newline
         try:
             yield json.loads(data[pos:end])
-        except ValueError:
+        except (ValueError, RecursionError):
+            # RecursionError: json's decoder recurses per nesting level,
+            # so a row nested thousands deep raises rather than parses.
             pass
         pos = end + 1
 
