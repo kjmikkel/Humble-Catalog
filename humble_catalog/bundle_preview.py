@@ -46,16 +46,193 @@ def strength(score):
 # band between them the opposite way round. See that module's docstring.
 
 HOST = "humblebundle.com"
-# The blob sits ~3/4 of the way into a ~650 KB page, so this path needs a
-# bigger read than url_import's <head>-oriented default.
+# A bundle page is ~425 KB and a listing ~400 KB since the 2026-11
+# redesign, so this path needs a bigger read than url_import's
+# <head>-oriented default.
 MAX_PAGE_BYTES = 8 * 1024 * 1024
-_BLOB = re.compile(
-    r'<script id="webpack-bundle-page-data" type="application/json">'
-    r'(.*?)</script>', re.S)
+
+# Since the 2026-11 redesign the site is a Next.js app: a page's data is
+# no longer a <script type="application/json"> block but the React Server
+# Components "flight" payload, streamed as string chunks of
+# self.__next_f.push([1, "..."]). Only type-1 chunks carry the payload.
+_PUSH = re.compile(r'self\.__next_f\.push\((\[\s*1\s*,\s*".*?"\s*\])\)</script>',
+                   re.S)
+# One flight row: a hex id, a colon, and an optional uppercase tag.
+_ROW = re.compile(rb"([0-9a-f]+):([A-Z]*)")
+# Said by every refusal below that may mean the redesign moved again.
+_SHAPE_CHANGED = "Humble may have changed the page"
+
+
+def _flight(page):
+    """The page's RSC flight payload, the push chunks joined in order."""
+    parts = []
+    for match in _PUSH.finditer(page):
+        try:
+            chunk = json.loads(match.group(1))
+        except ValueError:
+            continue
+        if len(chunk) == 2 and isinstance(chunk[1], str):
+            parts.append(chunk[1])
+    return "".join(parts)
+
+
+def _rows(flight):
+    """Every JSON row of a flight payload, parsed, in order.
+
+    Rows are `id:payload` ending in a newline -- except a `T` row, which
+    is `id:T<hex length>,<text>` with the length counted in UTF-8 BYTES
+    and no newline after it. That is why this walks bytes: splitting on
+    newlines would glue the row after a text row onto the text, and
+    counting characters would land mid-row after the first non-ASCII
+    description. Rows that are not JSON (imports, hints) are skipped.
+    """
+    data = flight.encode("utf-8")
+    pos = 0
+    while pos < len(data):
+        match = _ROW.match(data, pos)
+        if match is None:
+            newline = data.find(b"\n", pos)
+            if newline < 0:
+                return
+            pos = newline + 1
+            continue
+        pos = match.end()
+        if match.group(2) == b"T":
+            comma = data.find(b",", pos)
+            try:
+                length = int(data[pos:comma], 16)
+            except ValueError:
+                return
+            pos = comma + 1 + length
+            continue
+        newline = data.find(b"\n", pos)
+        end = len(data) if newline < 0 else newline
+        try:
+            yield json.loads(data[pos:end])
+        except ValueError:
+            pass
+        pos = end + 1
+
+
+def _dicts(page):
+    """Every dict anywhere in a page's flight payload, outermost first.
+
+    Iterative, not recursive: a React tree nests deeper than it is wide,
+    and recursion depth is the one limit here that size does not set.
+    """
+    stack = list(reversed(list(_rows(_flight(page)))))
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            yield node
+            stack.extend(reversed(list(node.values())))
+        elif isinstance(node, list):
+            stack.extend(reversed(node))
+
+
+def _deref(value, root):
+    """A `$<row>:...:bundlePage:<path>` reference, resolved within `root`.
+
+    RSC writes an object it has already sent as a reference to the first
+    copy: a cumulative tier lists the cheaper tiers' items this way. Only
+    references into the bundle object itself are followed; anything else
+    -- or a path that does not resolve -- comes back unresolved, and the
+    caller drops it rather than counting a string as an item.
+    """
+    if not (isinstance(value, str) and value.startswith("$")
+            and ":bundlePage:" in value):
+        return value
+    node = root
+    for step in value.split(":bundlePage:", 1)[1].split(":"):
+        if isinstance(node, list) and step.isdigit() and int(step) < len(node):
+            node = node[int(step)]
+        elif isinstance(node, dict) and step in node:
+            node = node[step]
+        else:
+            return None
+    return node
+
+
+def machine_name(key):
+    """The order API's machine_name for a bundle page's item key.
+
+    The page keys an item `<machine_name>_<bundle>_<kind>` -- e.g.
+    `quietharbor_examplepress_worldofexampliabooks_bookbundle` -- where
+    the catalog, filled from the order API, holds `quietharbor_examplepress`.
+    Measured 2026-11-12 across every live book bundle: the full key
+    matched no catalog row, the stripped one matched as many as title
+    matching did, and title matching found almost nothing it missed. The
+    machine_name may hold underscores of its own, hence rsplit.
+    """
+    parts = key.rsplit("_", 2)
+    return parts[0] if len(parts) == 3 and parts[0] else key
+
+
+# Delivery methods that are not a storefront: a book or other file the
+# owner downloads from Humble itself.
+_NOT_A_STORE = frozenset({"download"})
+
+
+def _as_bundle_data(page):
+    """A redesigned bundle object, in the bundleData shape preview() reads.
+
+    An adapter rather than a rewrite of preview(): its counting rules and
+    their tests are the spec, and keeping the redesign at this seam keeps
+    them that. Each field maps one to one --
+
+      title                 -> basic_data.human_name
+      tiers[].price         -> tier_pricing_data[id]["price|money"]
+      tiers[].bundleItems   -> tier_display_data[id] (cumulative, as before)
+      item key, title       -> tier_item_data[machine_name].human_name
+      item deliveryMethods  -> platforms_and_oses.game: a store method
+                               routes the item to title matching, as the
+                               old {"game": {"steam": [...]}} did
+    """
+    page = shapes.as_mapping(page)
+    pricing, display, items, order = {}, {}, {}, []
+    currency = None
+    for tier in shapes.as_list(page.get("tiers")):
+        tier = shapes.as_mapping(tier)
+        tier_id = shapes.as_text(tier.get("id"))
+        if not tier_id:
+            continue
+        price = shapes.as_mapping(tier.get("price"))
+        currency = currency or shapes.as_text(price.get("currencyCode"))
+        pricing[tier_id] = {"price|money": {
+            "amount": price.get("amount"),
+            "currency": price.get("currencyCode")}}
+        names = []
+        for raw in shapes.as_list(tier.get("bundleItems")):
+            item = shapes.as_mapping(_deref(raw, page))
+            key = shapes.as_text(item.get("key"))
+            if not key:
+                continue
+            name = machine_name(key)
+            names.append(name)
+            stores = {store for store in (shapes.text_list(
+                item.get("deliveryMethods")) or ())
+                if store and store not in _NOT_A_STORE}
+            items.setdefault(name, {
+                "human_name": shapes.as_text(item.get("title")) or name,
+                "platforms_and_oses": (
+                    {"game": {store: [] for store in sorted(stores)}}
+                    if stores else {}),
+            })
+        display[tier_id] = {"identifier": tier_id,
+                            "tier_item_machine_names": names}
+        order.append(tier_id)
+    return {
+        "basic_data": {"human_name": shapes.as_text(page.get("title")),
+                       "currency": currency},
+        "tier_order": order,
+        "tier_pricing_data": pricing,
+        "tier_display_data": display,
+        "tier_item_data": items,
+    }
 
 
 def fetch_bundle(url, http=None):
-    """The bundleData dict embedded in a live bundle page.
+    """The bundleData dict for a live bundle page.
 
     Reuses url_import's fetch guards -- scheme allowlist, post-redirect
     re-check, size cap, shared retry policy -- but not its OpenGraph
@@ -65,10 +242,10 @@ def fetch_bundle(url, http=None):
     Raises ValueError for a non-Humble host or a page carrying no bundle
     data; lets HTTP and network errors propagate as themselves.
 
-    The blob is third-party content, so it is read through `shapes`: a
-    page whose JSON parses but is not the expected object yields an empty
-    dict, which `preview` reports as a bundle selling nothing, rather than
-    an AttributeError surfacing as a 500 from the viewer route.
+    The page is third-party content, so it is read through `shapes`: a
+    bundle object whose fields are not the expected types yields a
+    bundle selling nothing, rather than an AttributeError surfacing as a
+    500 from the viewer route.
     """
     parts = urlparse(url_import.normalize_url(url))
     host = parts.netloc.lower().removeprefix("www.")
@@ -76,64 +253,46 @@ def fetch_bundle(url, http=None):
         raise ValueError(f"not a HumbleBundle URL: {host or url}")
     page = url_import._read_capped(
         url_import._fetch_html(parts.geturl(), http), limit=MAX_PAGE_BYTES)
-    match = _BLOB.search(page)
-    if not match:
-        # Measured 2026-07-31, and the old wording was wrong: a closed
-        # bundle does not redirect. It serves its own URL with its own
-        # <title>, ~530 KB of marketing shell, and no blob -- not even
-        # its machine_name survives. Nor does an archive have it: every
-        # Wayback capture of a sampled bundle is the shell, and Humble
-        # exposes no JSON endpoint. So the message closes the door
-        # rather than inviting a hunt for the working URL; the reasoning
-        # is the out-of-scope entry in docs/BACKLOG.md.
-        raise ValueError(
-            "not a Humble bundle page (no bundle data found) -- a bundle "
-            "that has closed still serves its page, but without its "
-            "contents; they are not recoverable")
-    blob = shapes.as_mapping(json.loads(match.group(1)))
-    return shapes.as_mapping(blob.get("bundleData"))
+    for node in _dicts(page):
+        bundle = node.get("bundlePage")
+        if isinstance(bundle, dict) and isinstance(bundle.get("tiers"), list):
+            return _as_bundle_data(bundle)
+    # Measured 2026-07-31 on the old site: a closed bundle does not
+    # redirect, it serves its own URL with no data, and no archive or
+    # JSON endpoint has it either -- see the out-of-scope entry in
+    # docs/BACKLOG.md. Not re-measured since the redesign, so the
+    # message also names the other reason a page can lack the data.
+    raise ValueError(
+        "not a Humble bundle page (no bundle data found) -- a bundle "
+        "that has closed still serves its page, but without its "
+        f"contents; or {_SHAPE_CHANGED}")
 
 
 # The live bundles are listed on Humble's own storefront pages (#95).
-# Measured 2026-09-27: a logged-out GET of /books or /games embeds this
-# block, whose data.<section>.mosaic[].products hold every live bundle --
-# product_url, tile_name, machine_name, end date -- so one request per
-# listing lists them all. The owned/new headline is NOT fetched here: it
-# needs each bundle's own ~500 KB page, so the viewer asks for it one
-# bundle at a time, when the owner clicks Check.
+# Measured 2026-11-12, after the redesign: a logged-out GET of /books or
+# /games carries one product object per live bundle in its flight payload
+# -- url, title, endDate, productKey -- so one request per listing lists
+# them all. The owned/new headline is NOT fetched here: it needs each
+# bundle's own page, so the viewer asks for it one bundle at a time, when
+# the owner clicks Check.
 LISTING_KINDS = ("books", "games")
-_LISTING_BLOB = re.compile(
-    r'<script id="landingPage-json-data" type="application/json">'
-    r'(.*?)</script>', re.S)
 # A bundle page's path, and nothing else: no scheme, no host, no "..".
 # Anything that fails this is dropped rather than made into a link.
 _BUNDLE_PATH = re.compile(r"^/(books|games)/[a-z0-9][a-z0-9-]*$")
-
-
-def _listing_tiles(node):
-    """Every dict carrying a product_url, anywhere under `node`."""
-    if isinstance(node, dict):
-        if "product_url" in node:
-            yield node
-        for value in node.values():
-            yield from _listing_tiles(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from _listing_tiles(value)
 
 
 def live_bundles(http=None, kinds=LISTING_KINDS):
     """[{kind, name, url, ends}] for the bundles live on Humble right now.
 
     One logged-out GET per listing page, through the same guarded fetch
-    as fetch_bundle, and no cookies: the list is public. The blob is
+    as fetch_bundle, and no cookies: the list is public. The payload is
     third-party content, so every field is read through `shapes` and a
-    tile whose URL is not a plain /books/ or /games/ path is dropped --
+    product whose URL is not a plain /books/ or /games/ path is dropped --
     the viewer turns these into links and checks. Deduplicated on the
-    URL (a "popular" section repeats tiles), sorted by kind, then the
+    URL (a "popular" section repeats products), sorted by kind, then the
     soonest to end.
 
-    Raises ValueError when a listing no longer carries the block, which
+    Raises ValueError when a listing carries no product at all, which
     would mean the page changed shape; network errors propagate.
     """
     found = {}
@@ -141,24 +300,21 @@ def live_bundles(http=None, kinds=LISTING_KINDS):
         page = url_import._read_capped(
             url_import._fetch_html(f"https://www.{HOST}/{kind}", http),
             limit=MAX_PAGE_BYTES)
-        match = _LISTING_BLOB.search(page)
-        if not match:
+        products = [node for node in _dicts(page)
+                    if "productKey" in node and "url" in node]
+        if not products:
             raise ValueError(f"the /{kind} listing carries no bundle list -- "
-                             "Humble may have changed the page")
-        try:
-            blob = json.loads(match.group(1))
-        except ValueError:
-            blob = None
-        for tile in _listing_tiles(blob):
-            path = shapes.as_text(tile.get("product_url")) or ""
+                             f"{_SHAPE_CHANGED}")
+        for product in products:
+            path = shapes.as_text(product.get("url")) or ""
             if not _BUNDLE_PATH.match(path) or path in found:
                 continue
             found[path] = {
                 "kind": path.split("/")[1],
-                "name": (shapes.as_text(tile.get("tile_name"))
-                         or shapes.as_text(tile.get("machine_name")) or path),
+                "name": (shapes.as_text(product.get("title"))
+                         or shapes.as_text(product.get("slug")) or path),
                 "url": f"https://www.{HOST}{path}",
-                "ends": shapes.as_text(tile.get("end_date|datetime")) or "",
+                "ends": shapes.as_text(product.get("endDate")) or "",
             }
     return sorted(found.values(),
                   key=lambda b: (b["kind"], b["ends"] or "~", b["name"].lower()))

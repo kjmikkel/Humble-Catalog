@@ -393,17 +393,167 @@ def _http(text, status=200, ctype="text/html; charset=utf-8"):
     return http
 
 
-def _page():
-    return (FIXTURES / "bundle_page.html").read_text(encoding="utf-8")
+# -- Pages in the shape the 2026-11 redesign serves ------------------------
+# The site is Next.js now: a page's data is the React Server Components
+# flight payload, pushed as string chunks of self.__next_f.push([1, "..."]).
+# Built here from Python data rather than kept as captured files, so each
+# trap the format sets is placed on purpose: a chunk boundary mid-row, a
+# length-prefixed T text row counted in UTF-8 bytes with no newline after
+# it, and "$..." references standing in for objects already sent.
+
+def _row(row_id, value):
+    return f"{row_id}:{json.dumps(value)}\n"
 
 
-def test_fetch_bundle_parses_the_embedded_data_blob():
+def _text_row(row_id, text):
+    return f"{row_id}:T{len(text.encode('utf-8')):x},{text}"
+
+
+def _next_page(*rows, title="Humble Bundle"):
+    flight = "".join(rows)
+    cut = len(flight) // 2      # anywhere, as a real stream splits
+    pushes = "".join(f"<script>self.__next_f.push({json.dumps([1, part])})</script>"
+                     for part in (flight[:cut], flight[cut:]))
+    return (f"<!DOCTYPE html><html><head><title>{title}</title></head><body>"
+            "<script>(self.__next_f=self.__next_f||[]).push([0])</script>"
+            f"{pushes}</body></html>")
+
+
+_SUFFIX = "_worldofexampliabooks_bookbundle"
+
+
+def _item(machine, title, delivery=("download",)):
+    return {"id": f"id-{machine}", "key": machine + _SUFFIX, "title": title,
+            "deliveryMethods": list(delivery), "platforms": ["pdf", "epub"]}
+
+
+def _ref(tier, index):
+    return f"$e:0:props:children:props:bundlePage:tiers:{tier}:bundleItems:{index}"
+
+
+def _bundle_page_object(**overrides):
+    """The same invented bundle as bundle_data.json, in the new shape."""
+    page = {
+        "id": "bundle-1", "slug": "the-world-of-examplia-books",
+        "title": "Humble Book Bundle: The World of Examplia",
+        "bundleType": "books", "details": "$6e",
+        "endDate": "2026-10-08T18:00:00.000Z",
+        "tiers": [
+            {"id": "initial", "sku": "x_initial",
+             "price": {"amount": 5.47, "currencyCode": "EUR"},
+             "bundleItems": [
+                 _item("quietharbor_examplepress", "The Quiet Harbor: A Novel")]},
+            {"id": "bt13", "sku": "x_bt13",
+             "price": {"amount": 13.13, "currencyCode": "EUR"},
+             "bundleItems": [
+                 _ref(0, 0),
+                 _item("quietharbor_reissue_examplepress",
+                       "The Quiet Harbor: A Novel"),
+                 _item("shadowhound_omnibus_examplecomics",
+                       "Shadow Hound Vol. 1-6")]},
+            {"id": "bt21", "sku": "x_bt21",
+             "price": {"amount": 21.9, "currencyCode": "EUR"},
+             "bundleItems": [
+                 _ref(0, 0), _ref(1, 1), _ref(1, 2),
+                 _item("moonfall_omnibus_examplecomics", "Moonfall Vol. 1-3"),
+                 _item("unrelatedbook_examplepress", "Unrelated Book"),
+                 _item("hollowcrypt_examplegames", "The Hollow Crypt")]},
+        ],
+    }
+    page.update(overrides)
+    return page
+
+
+def _page(bundle=None):
+    tree = ["$", "main", None, {"children": [
+        "$", "div", None, {"bundlePage": bundle or _bundle_page_object()}]}]
+    return _next_page(
+        _row(0, ["$", "html", None, {"lang": "en"}]),
+        '1:I["chunks/app.js",["app"],"BundlePage"]\n',
+        # Multi-byte text, then the data row with no newline between: a
+        # character count would land inside the next row and lose it.
+        _text_row("6e", "Bücher für alle\nzwei Zeilen — ✓"),
+        _row("e", tree))
+
+
+def test_fetch_bundle_parses_the_flight_payload():
     bundle = bundle_preview.fetch_bundle(
         "https://www.humblebundle.com/books/the-world-of-examplia-books",
         http=_http(_page()))
     assert bundle["basic_data"]["human_name"] == (
         "Humble Book Bundle: The World of Examplia")
     assert len(bundle["tier_item_data"]) == 6
+
+
+def test_fetch_bundle_names_items_by_the_order_apis_machine_name():
+    # The page's key carries the bundle and kind after the machine_name;
+    # owned matching is on the machine_name the catalog holds.
+    bundle = bundle_preview.fetch_bundle(
+        "https://www.humblebundle.com/books/x", http=_http(_page()))
+    assert set(bundle["tier_item_data"]) == set(_bundle()["tier_item_data"])
+
+
+@pytest.mark.parametrize("key, expected", [
+    ("quietharbor_examplepress_worldofexampliabooks_bookbundle",
+     "quietharbor_examplepress"),
+    ("widgetquest_widgetquestcollection_bundle", "widgetquest"),
+    ("odd___name_reforged_somebundle_bundle", "odd___name_reforged"),
+    ("bare", "bare"),
+    ("two_parts", "two_parts"),
+])
+def test_machine_name_strips_the_bundle_and_kind(key, expected):
+    assert bundle_preview.machine_name(key) == expected
+
+
+def test_fetch_bundle_resolves_references_to_cheaper_tiers_items():
+    bundle = bundle_preview.fetch_bundle(
+        "https://www.humblebundle.com/books/x", http=_http(_page()))
+    assert bundle["tier_display_data"] == _bundle()["tier_display_data"]
+
+
+def test_an_unresolvable_reference_is_dropped_not_counted():
+    page = _bundle_page_object()
+    page["tiers"][1]["bundleItems"].append(_ref(9, 9))
+    page["tiers"][1]["bundleItems"].append("$somewhere:else")
+    bundle = bundle_preview.fetch_bundle(
+        "https://www.humblebundle.com/books/x", http=_http(_page(page)))
+    assert len(bundle["tier_display_data"]["bt13"]["tier_item_machine_names"]) == 3
+
+
+def test_the_fetched_page_reports_exactly_as_the_old_bundle_data_did(tmp_path):
+    # The adapter's contract: the redesigned page and the old bundleData
+    # fixture describe the same bundle, so preview() must not tell them apart.
+    fetched = bundle_preview.fetch_bundle(
+        "https://www.humblebundle.com/books/x", http=_http(_page()))
+    conn = _conn(tmp_path)
+    try:
+        assert (bundle_preview.preview(conn, fetched, url="u")
+                == bundle_preview.preview(conn, _bundle(), url="u"))
+    finally:
+        conn.close()
+
+
+def test_a_store_delivery_method_routes_an_item_to_title_matching():
+    page = _bundle_page_object()
+    page["tiers"][2]["bundleItems"].append(
+        _item("widgetquest", "Widget Quest", delivery=["steam"]))
+    bundle = bundle_preview.fetch_bundle(
+        "https://www.humblebundle.com/books/x", http=_http(_page(page)))
+    items = bundle["tier_item_data"]
+    assert bundle_preview.delivery_stores(items["widgetquest"]) == {"steam"}
+    assert bundle_preview.delivery_stores(
+        items["quietharbor_examplepress"]) == set()
+
+
+def test_a_bundle_object_of_the_wrong_shape_sells_nothing():
+    bundle = bundle_preview.fetch_bundle(
+        "https://www.humblebundle.com/books/x",
+        http=_http(_page(_bundle_page_object(
+            tiers=["not a tier", {"id": "t", "bundleItems": "nope",
+                                  "price": [1]}]))))
+    assert bundle["tier_display_data"] == {
+        "t": {"identifier": "t", "tier_item_machine_names": []}}
+    assert bundle["tier_pricing_data"]["t"]["price|money"]["amount"] is None
 
 
 def test_fetch_bundle_rejects_a_non_humble_host_before_any_request():
@@ -1205,14 +1355,46 @@ def test_format_report_names_the_row_when_it_is_spelled_differently(tmp_path):
 
 
 # -- The live bundles, from Humble's own listing pages (#95) --------------
-# Measured 2026-09-27: a logged-out GET of /books (and /games) embeds a
-# landingPage-json-data block whose data.<section>.mosaic[].products hold
-# every live bundle: product_url, tile_name, machine_name, end date. One
-# request per listing. The fixture is invented and shaped like it, with a
-# software tile, a duplicate, and entries that must never become a link.
+# Measured 2026-11-12, after the redesign: a logged-out GET of /books (and
+# /games) carries one product object per live bundle in its flight
+# payload: url, title, slug, endDate, productKey. One request per listing.
+# The page here is invented and shaped like it, with a software product, a
+# duplicate, and entries that must never become a link.
+
+def _product(url, title, ends="2026-10-08T18:00:00.000Z", **extra):
+    return {"id": f"p-{title}", "productKey": f"{title}_bundle",
+            "productType": "humble-bundle", "category": "books",
+            "url": url, "slug": url.rsplit("/", 1)[-1], "title": title,
+            "endDate": ends, **extra}
+
 
 def _listing():
-    return (FIXTURES / "listing_page.html").read_text(encoding="utf-8")
+    popular = [
+        _product("/books/the-world-of-examplia-books",
+                 "Humble Book Bundle: The World of Examplia"),
+        _product("/software/sample-voice-pack-software", "Sample Voice Pack",
+                 ends="2026-10-01T18:00:00.000Z"),
+    ]
+    grid = [
+        _product("/books/the-world-of-examplia-books",
+                 "Humble Book Bundle: The World of Examplia"),
+        _product("/books/lantern-and-lockpick-books",
+                 "Humble Book Bundle: Lantern & Lockpick",
+                 ends="2026-10-02T18:00:00.000Z"),
+        "not an object",
+        {"productKey": "nourl_bundle", "title": "No URL at all"},
+        _product("https://example.test/books/elsewhere", "Absolute URL"),
+        _product("/books/../account", "Path trick"),
+        _product("/games/widget-quest-collection", "Widget Quest Collection",
+                 ends="2026-10-05T18:00:00.000Z"),
+    ]
+    return _next_page(
+        _row(0, ["$", "html", None, {"lang": "en"}]),
+        _text_row("9", "Läs mer — ✓"),
+        _row("a", ["$", "section", None, {"products": popular}]),
+        _row("b", ["$", "section", None, {"children": [
+            "$", "ul", None, {"items": grid}]}]),
+        title="Book Bundles")
 
 
 def test_live_bundles_lists_the_books_and_games_on_the_listing():
@@ -1227,7 +1409,7 @@ def test_live_bundles_lists_the_books_and_games_on_the_listing():
 def test_live_bundles_carry_an_absolute_humble_url_and_end_date():
     b = bundle_preview.live_bundles(http=_http(_listing()))[0]
     assert b["url"] == "https://www.humblebundle.com/books/lantern-and-lockpick-books"
-    assert b["ends"] == "2026-10-02T18:00:00"
+    assert b["ends"] == "2026-10-02T18:00:00.000Z"
 
 
 def test_live_bundles_never_link_anywhere_but_a_humble_bundle_page():
@@ -1251,7 +1433,16 @@ def test_a_listing_without_its_data_block_says_so():
         bundle_preview.live_bundles(http=_http("<html><body>shell</body></html>"))
 
 
-def test_a_listing_whose_data_is_not_the_expected_shape_lists_nothing():
+def test_a_listing_still_in_the_old_json_block_shape_says_so():
+    # The pre-redesign page: its data is no longer where this looks, and
+    # that must read as "the page changed", never as "nothing is on sale".
     page = ('<script id="landingPage-json-data" type="application/json">'
-            '["not", "an", "object"]</script>')
+            '{"data": {"products": [{"product_url": "/books/x"}]}}</script>')
+    with pytest.raises(ValueError, match="changed the page"):
+        bundle_preview.live_bundles(http=_http(page))
+
+
+def test_a_listing_whose_products_are_not_the_expected_shape_lists_nothing():
+    page = _next_page(_row("a", {"products": [
+        {"productKey": "k", "url": ["/books/x"], "title": 7}]}))
     assert bundle_preview.live_bundles(http=_http(page)) == []
